@@ -1,15 +1,13 @@
-// app/admin/reseller/page.tsx
+// app/reseller/page.tsx
 
 export const runtime = "edge";
 
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
-
-// ✅ Menggunakan path alias `@/` agar terbaca dengan benar di Cloudflare
-import { InventoryTable } from "@/app/admin/master/inventory-table";
+import { InventoryTable } from "../admin/master/inventory-table";
 import { PendingRequests } from "@/components/pending-requests";
 import { ResellerStats } from "./reseller-stats";
-import { logout } from "@/app/dashboard/actions";
+import { logout } from "../dashboard/actions";
 import { DashboardShell, type NavSection } from "@/components/dashboard-shell";
 
 export default async function ResellerPage() {
