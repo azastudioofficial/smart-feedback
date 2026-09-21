@@ -4,10 +4,10 @@ export const runtime = "edge";
 
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { InventoryTable } from "../admin/master/inventory-table";
+import { InventoryTable } from "@/app/admin/master/inventory-table";
 import { PendingRequests } from "@/components/pending-requests";
 import { ResellerStats } from "./reseller-stats";
-import { logout } from "../dashboard/actions";
+import { logout } from "@/app/dashboard/actions";
 import { DashboardShell, type NavSection } from "@/components/dashboard-shell";
 
 export default async function ResellerPage() {
