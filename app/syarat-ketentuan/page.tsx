@@ -1,7 +1,5 @@
 // app/syarat-ketentuan/page.tsx
 
-export const runtime = "edge";
-
 import type { CSSProperties } from "react";
 import { darkenHex, lightenHex } from "@/lib/utils";
 

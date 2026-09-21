@@ -1,7 +1,5 @@
 // app/dashboard/page.tsx
 
-export const runtime = "edge";
-
 import { redirect } from "next/navigation";
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { StoreProvider } from "./store-context";

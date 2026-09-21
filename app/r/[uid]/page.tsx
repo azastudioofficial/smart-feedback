@@ -2,8 +2,6 @@
 // Pintu masuk pertama saat pelanggan scan QR / tap NFC.
 // URL: domain.com/r/X7k9P2  (short_code) atau domain.com/r/<uuid>
 
-export const runtime = "edge";
-
 import { redirect, notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
 

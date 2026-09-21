@@ -1,7 +1,5 @@
 // app/login/page.tsx
 
-export const runtime = "edge";
-
 import type { CSSProperties } from "react";
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";

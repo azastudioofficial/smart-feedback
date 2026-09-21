@@ -3,6 +3,16 @@
 // Dipakai bareng oleh app/admin/master (batch) dan app/dashboard (single).
 // Satu sumber kebenaran - kalau ada perbaikan, cukup di file ini saja.
 
+import type QRCodeStyling from "qr-code-styling";
+
+// Tipe opsi bawaan qr-code-styling. Object opsi di bawah memakai string biasa
+// (mis. mode: "Byte", type: design.dotStyle) yang secara runtime valid, tapi
+// TypeScript menganggapnya kurang spesifik dibanding union literal milik
+// library. Karena itu hasilnya di-cast sekali di akhir fungsi.
+type QrStylingOptions = NonNullable<
+  ConstructorParameters<typeof QRCodeStyling>[0]
+>;
+
 export type QrDesign = {
   preset: string;
   logoOption: "none" | "google_g" | "custom";
@@ -74,12 +84,12 @@ export function buildQrStylingOptions(
   design: QrDesign,
   data: string,
   size: number
-) {
+): QrStylingOptions {
   let image = "";
   if (design.logoOption === "google_g") image = GOOGLE_G_LOGO;
   else if (design.logoOption === "custom") image = design.customLogo;
 
-  return {
+  const options = {
     width: size,
     height: size,
     data,
@@ -114,6 +124,8 @@ export function buildQrStylingOptions(
       color: design.color2,
     },
   };
+
+  return options as unknown as QrStylingOptions;
 }
 
 export function triggerBlobDownload(blob: Blob, filename: string) {

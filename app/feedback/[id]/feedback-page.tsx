@@ -1,7 +1,5 @@
 // app/feedback/[id]/page.tsx
 
-export const runtime = "edge";
-
 import { notFound, redirect } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";

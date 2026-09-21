@@ -4,8 +4,6 @@
 // Cloudinary sendiri yang jadi CDN penyimpan fotonya - link ini
 // hanya "alias pendek" biar rapi di pesan WhatsApp.
 
-export const runtime = "edge";
-
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 

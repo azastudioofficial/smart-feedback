@@ -1,8 +1,6 @@
 // lib/supabase/server.ts
 // Dipakai di Server Component / Server Action / Route Handler.
-// Runtime edge (untuk Cloudflare Pages) — jangan import ini di client component.
-
-export const runtime = "edge";
+// Jangan import file ini di client component.
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";

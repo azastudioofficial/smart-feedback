@@ -1,7 +1,5 @@
 // app/activate/[id]/page.tsx
 
-export const runtime = "edge";
-
 import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { Ban, CheckCircle2, Clock3 } from "lucide-react";

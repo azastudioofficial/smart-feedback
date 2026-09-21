@@ -3,8 +3,6 @@
 // login (beda dengan /api/cron/cleanup yang pakai token, karena ini
 // dipanggil dari dalam dashboard admin, bukan dari layanan luar).
 
-export const runtime = "edge";
-
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 
