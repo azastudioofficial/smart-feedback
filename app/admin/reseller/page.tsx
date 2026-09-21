@@ -1,9 +1,11 @@
-// app/reseller/page.tsx
+// app/admin/reseller/page.tsx
 
 export const runtime = "edge";
 
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
+
+// ✅ Menggunakan path alias `@/` untuk menunjuk langsung dari root project
 import { InventoryTable } from "@/app/admin/master/inventory-table";
 import { PendingRequests } from "@/components/pending-requests";
 import { ResellerStats } from "./reseller-stats";
