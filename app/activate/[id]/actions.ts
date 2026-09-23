@@ -106,3 +106,24 @@ export async function activateProduct(
 
   return { success: true };
 }
+
+// Dipakai halaman "menunggu persetujuan" untuk polling - biar begitu
+// admin/reseller meng-ACC aktivasi, browser pelanggan/owner yang
+// masih terbuka di halaman itu otomatis pindah ke halaman feedback
+// sendiri, tanpa perlu scan ulang QR atau refresh manual.
+export async function checkActivationStatus(
+  productId: string
+): Promise<{ isActive: boolean; isSuspended: boolean }> {
+  const service = createServiceClient();
+
+  const { data } = await service
+    .from("products")
+    .select("is_active, is_suspended")
+    .eq("id", productId)
+    .maybeSingle();
+
+  return {
+    isActive: data?.is_active ?? false,
+    isSuspended: data?.is_suspended ?? false,
+  };
+}
