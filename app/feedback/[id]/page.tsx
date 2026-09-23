@@ -19,7 +19,7 @@ export default async function FeedbackPage({ params }: Props) {
 
   const { data: product, error } = await supabase
     .from("products")
-    .select("id, business_name, google_review_url, logo_url, cover_image_url, brand_color, is_active, is_suspended")
+    .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, is_active, is_suspended")
     .eq("id", id)
     .maybeSingle();
 
@@ -64,7 +64,7 @@ export default async function FeedbackPage({ params }: Props) {
 
   return (
     <main
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F3F4F1] px-4 py-10"
+      className="relative flex min-h-[100dvh] items-start justify-center overflow-hidden bg-[#F3F4F1] px-4 pb-6 pt-8 sm:items-center sm:py-10"
       style={
         {
           "--brand": brandColor,
