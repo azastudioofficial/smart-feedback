@@ -93,85 +93,127 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
     );
   }
 
+  function Photo({ f }: { f: Feedback }) {
+    if (f.photo_url) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={cloudinaryThumbnail(f.photo_url)}
+          alt="Foto bukti keluhan"
+          loading="lazy"
+          onClick={() => setPreviewUrl(f.photo_url)}
+          className="h-14 w-14 shrink-0 cursor-pointer rounded-md border border-black/[0.08] object-cover transition hover:opacity-80"
+        />
+      );
+    }
+    if (f.photo_path) {
+      return (
+        <button
+          onClick={() => handleViewPhoto(f)}
+          disabled={loadingPhoto}
+          className="shrink-0 text-sm text-[var(--brand)] underline underline-offset-2"
+        >
+          Lihat
+        </button>
+      );
+    }
+    return <span className="text-xs text-[#132320]/40">-</span>;
+  }
+
+  function StatusButton({ f }: { f: Feedback }) {
+    return (
+      <button
+        onClick={() => handleToggleStatus(f.id, f.status)}
+        className="flex min-h-11 items-center py-2"
+      >
+        <Badge
+          className={
+            f.status === "Resolved"
+              ? "bg-[var(--brand)] hover:bg-[var(--brand-dark)]"
+              : "bg-[#B5585E] hover:bg-[#9c4a50]"
+          }
+        >
+          {f.status}
+        </Badge>
+      </button>
+    );
+  }
+
   return (
-    <div className={`${CARD_SHELL} overflow-x-auto`}>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Tanggal</TableHead>
-            <TableHead>Nama</TableHead>
-            <TableHead>Pesan</TableHead>
-            <TableHead>Foto</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((f) => (
-            <TableRow key={f.id}>
-              <TableCell className="whitespace-nowrap text-xs text-[#132320]/50">
-                {new Date(f.created_at).toLocaleString("id-ID")}
-              </TableCell>
-              <TableCell>
-                {f.is_anonymous ? (
-                  <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
-                    Anonim
-                  </span>
-                ) : (
-                  f.customer_name || "-"
-                )}
-              </TableCell>
-              <TableCell className="max-w-xs">{f.complaint_text}</TableCell>
-              <TableCell>
-                {f.photo_url ? (
-                  // Foto Cloudinary: langsung render <img>, tidak perlu
-                  // fetch signed URL dulu. loading="lazy" supaya browser
-                  // cuma download gambar yang benar-benar terlihat di layar.
-                  // Ukuran gambar dipangkas lewat parameter transformasi
-                  // Cloudinary (f_auto,q_auto,w_400) - hemat bandwidth
-                  // dan cepat dimuat walau di koneksi lambat.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={cloudinaryThumbnail(f.photo_url)}
-                    alt="Foto bukti keluhan"
-                    loading="lazy"
-                    onClick={() => setPreviewUrl(f.photo_url)}
-                    className="h-14 w-14 cursor-pointer rounded-md border border-black/[0.08] object-cover transition hover:opacity-80"
-                  />
-                ) : f.photo_path ? (
-                  // Foto lama (sebelum migrasi Cloudinary) - masih di
-                  // Supabase Storage, perlu signed URL, jadi tetap
-                  // pakai link "Lihat" yang fetch on-demand.
-                  <button
-                    onClick={() => handleViewPhoto(f)}
-                    disabled={loadingPhoto}
-                    className="text-sm text-[var(--brand)] underline underline-offset-2"
-                  >
-                    Lihat
-                  </button>
-                ) : (
-                  <span className="text-xs text-[#132320]/40">-</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <button
-                  onClick={() => handleToggleStatus(f.id, f.status)}
-                  className="flex min-h-11 items-center py-2"
-                >
-                  <Badge
-                    className={
-                      f.status === "Resolved"
-                        ? "bg-[var(--brand)] hover:bg-[var(--brand-dark)]"
-                        : "bg-[#B5585E] hover:bg-[#9c4a50]"
-                    }
-                  >
-                    {f.status}
-                  </Badge>
-                </button>
-              </TableCell>
+    <>
+      {/* Tampilan HP / layar sempit: kartu bertumpuk, tanpa scroll
+          horizontal, lebih enak dibaca & disentuh jari. */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {items.map((f) => (
+          <div key={f.id} className={`${CARD_SHELL} flex gap-3 p-4`}>
+            <Photo f={f} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#132320]">
+                    {f.is_anonymous ? (
+                      <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
+                        Anonim
+                      </span>
+                    ) : (
+                      f.customer_name || "-"
+                    )}
+                  </p>
+                  <p className="text-xs text-[#132320]/50">
+                    {new Date(f.created_at).toLocaleString("id-ID")}
+                  </p>
+                </div>
+                <StatusButton f={f} />
+              </div>
+              <p className="mt-2 break-words text-sm text-[#132320]/80">
+                {f.complaint_text}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tampilan tablet/desktop: tabel, seperti sebelumnya. */}
+      <div className={`${CARD_SHELL} hidden overflow-x-auto md:block`}>
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-28">Tanggal</TableHead>
+              <TableHead className="w-24">Nama</TableHead>
+              <TableHead>Pesan</TableHead>
+              <TableHead className="w-16">Foto</TableHead>
+              <TableHead className="w-20">Status</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {items.map((f) => (
+              <TableRow key={f.id}>
+                <TableCell className="whitespace-nowrap align-top text-xs text-[#132320]/50">
+                  {new Date(f.created_at).toLocaleString("id-ID")}
+                </TableCell>
+                <TableCell className="align-top break-words">
+                  {f.is_anonymous ? (
+                    <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
+                      Anonim
+                    </span>
+                  ) : (
+                    f.customer_name || "-"
+                  )}
+                </TableCell>
+                <TableCell className="align-top whitespace-normal break-words line-clamp-3">
+                  {f.complaint_text}
+                </TableCell>
+                <TableCell className="align-top">
+                  <Photo f={f} />
+                </TableCell>
+                <TableCell className="align-top">
+                  <StatusButton f={f} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
         <DialogContent className="max-w-md">
@@ -185,6 +227,6 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
