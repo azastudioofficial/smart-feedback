@@ -1,7 +1,8 @@
 "use client";
 // app/activate/[id]/activate-form.tsx
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Store,
@@ -17,7 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { activateProduct } from "./actions";
+import { activateProduct, checkActivationStatus } from "./actions";
+
+// Interval polling status approval - 5 detik cukup cepat terasa
+// "otomatis" buat yang lagi nungguin, tapi tidak bikin server kebanjiran
+// request kalau ada banyak orang nungguin bersamaan.
+const POLL_INTERVAL_MS = 5000;
 
 // Font pairing sama persis dengan feedback-card.tsx (lihat komentar
 // di sana): Space Grotesk ("--font-display") CUMA untuk eyebrow +
@@ -28,10 +34,32 @@ const BODY = { fontFamily: "var(--font-admin-body)" };
 const DISPLAY = { fontFamily: "var(--font-display)" };
 
 export function ActivateForm({ productId }: { productId: string }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const redirectingRef = useRef(false);
+
+  // Selama menunggu approval, polling status kartu tiap beberapa
+  // detik. Begitu admin/reseller meng-ACC (is_active jadi true),
+  // otomatis pindah ke halaman feedback - tanpa scan ulang QR.
+  useEffect(() => {
+    if (!submitted) return;
+
+    const interval = setInterval(async () => {
+      if (redirectingRef.current) return;
+
+      const status = await checkActivationStatus(productId);
+      if (status.isActive && !redirectingRef.current) {
+        redirectingRef.current = true;
+        clearInterval(interval);
+        router.replace(`/feedback/${productId}`);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [submitted, productId, router]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -84,6 +112,11 @@ export function ActivateForm({ productId }: { productId: string }) {
               aktif dan bisa langsung dipakai pelanggan — Anda akan bisa
               login ke dashboard memakai email &amp; password yang baru saja
               didaftarkan.
+            </p>
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-[#132320]/40">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Tetap di halaman ini - begitu disetujui, halaman feedback
+              akan terbuka otomatis.
             </p>
           </CardContent>
         </Card>
