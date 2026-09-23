@@ -277,7 +277,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
         {hasCover && (
           <div className="relative">
-            <div className="relative h-20 w-full">
+            <div className="relative h-36 w-full sm:h-44">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={product.cover_image_url ?? undefined}
