@@ -605,4 +605,4 @@ export function FeedbackCard({ product }: { product: Product }) {
       </Card>
     </div>
   );
-}
+} 
