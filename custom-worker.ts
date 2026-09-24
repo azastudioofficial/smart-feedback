@@ -13,7 +13,7 @@ export default {
   fetch: handler.fetch,
 
   // Dipanggil otomatis oleh Cloudflare sesuai jadwal di wrangler.jsonc.
-  async scheduled(event, env: any, ctx) {
+  async scheduled(event: any, env: any, ctx: any) {
     // Panggil endpoint cleanup SECARA INTERNAL (tanpa keluar ke internet),
     // pakai handler fetch yang sama - jadi tidak tergantung domain publik.
     const request = new Request("https://internal.local/api/cron/cleanup", {
