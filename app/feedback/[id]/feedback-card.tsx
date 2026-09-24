@@ -34,6 +34,7 @@ import {
 import {
   compressComplaintPhoto,
   uploadToCloudinaryWithProgress,
+  cloudinaryThumbnail,
 } from "@/lib/utils";
 import { submitFeedback, logPositiveClick } from "./actions";
 
@@ -80,7 +81,7 @@ function BrandMarkGlow({ product }: { product: Product }) {
       <div className="relative flex h-12 w-12 items-center justify-center rounded-xl border border-black/[0.06] bg-white p-1 shadow-md">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={product.logo_url}
+          src={product.logo_url ? cloudinaryThumbnail(product.logo_url, "f_auto,q_auto,w_120") : undefined}
           alt={product.business_name ?? "Logo toko"}
           className="h-full w-full object-contain"
         />
@@ -126,7 +127,7 @@ function OverlapAvatar({ product }: { product: Product }) {
       {product.logo_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={product.logo_url}
+          src={product.logo_url ? cloudinaryThumbnail(product.logo_url, "f_auto,q_auto,w_120") : undefined}
           alt={product.business_name ?? "Logo toko"}
           className="h-full w-full object-contain"
         />
@@ -280,7 +281,7 @@ export function FeedbackCard({ product }: { product: Product }) {
             <div className="relative h-36 w-full sm:h-44">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={product.cover_image_url ?? undefined}
+                src={product.cover_image_url ? cloudinaryThumbnail(product.cover_image_url, "f_auto,q_auto,w_800") : undefined}
                 alt=""
                 className="absolute inset-0 h-full w-full object-cover"
                 style={{ objectPosition: product.cover_position || "50% 50%" }}
