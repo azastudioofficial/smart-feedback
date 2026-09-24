@@ -3,7 +3,16 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
+import Link from "next/link";
+import {
+  LogIn,
+  Mail,
+  Lock,
+  Loader2,
+  Eye,
+  EyeOff,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +30,7 @@ export function LoginForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -98,25 +108,58 @@ export function LoginForm() {
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="email"
+                autoFocus
                 required
                 className="h-11 text-base"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-[#132320]/40" />
-                Password
-              </Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-                className="h-11 text-base"
-              />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="password" className="gap-1.5">
+                  <Lock className="h-3.5 w-3.5 text-[#132320]/40" />
+                  Password
+                </Label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs font-medium text-[var(--brand)] hover:underline"
+                >
+                  Lupa password?
+                </Link>
+              </div>
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  className="h-11 pr-11 text-base"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                  aria-label={
+                    showPassword ? "Sembunyikan password" : "Lihat password"
+                  }
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[#132320]/40 transition hover:text-[#132320]/70"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            {error && <p className="text-sm text-[#B5585E]">{error}</p>}
+            {error && (
+              <div className="flex items-start gap-2 rounded-xl bg-[#B5585E]/10 px-3.5 py-2.5 text-sm text-[#B5585E]">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
             <Button
               type="submit"
