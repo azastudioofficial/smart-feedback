@@ -799,4 +799,4 @@ export function SettingsForm({ product }: { product: Product }) {
       </div>
     </form>
   );
-}
+} 
