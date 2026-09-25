@@ -23,6 +23,7 @@ import {
   MessageSquareCheck,
   Loader2,
   ChevronLeft,
+  ChevronDown,
   ImagePlus,
   X,
   ShieldCheck,
@@ -30,6 +31,7 @@ import {
   Store,
   Star,
   ArrowRight,
+  Share2,
 } from "lucide-react";
 import {
   compressComplaintPhoto,
@@ -37,6 +39,11 @@ import {
   cloudinaryThumbnail,
 } from "@/lib/utils";
 import { submitFeedback, logPositiveClick } from "./actions";
+import {
+  SOCIAL_PLATFORM_META,
+  socialLinkDisplayLabel,
+  type SocialLink,
+} from "@/lib/social-links";
 
 type Product = {
   id: string;
@@ -45,7 +52,165 @@ type Product = {
   logo_url: string | null;
   cover_image_url?: string | null;
   cover_position?: string | null;
+  social_links?: SocialLink[] | null;
 };
+
+// Bagian "Terhubung dengan Kami" di paling bawah kartu - collapsed
+// secara default, baru terbuka ke bawah begitu pelanggan mengetuk
+// headernya. Kalau toko belum isi tautan apapun di Pengaturan,
+// komponen ini sengaja tidak me-render apapun (return null) supaya
+// kartu tidak terlihat ada bagian kosong/rusak.
+//
+// Catatan performa (PENTING - ini yang bikin bagian ini "murah" buat
+// dimuat, terlepas dari berapa banyak tautan/ikon custom yang dipasang
+// toko):
+// 1. hasOpened: daftar tombol link (termasuk gambar ikon custom) BARU
+//    di-render begitu pelanggan pertama kali mengetuk headernya -
+//    bukan langsung ikut ke-render (dan gambarnya ikut didownload)
+//    begitu halaman feedback dibuka. Mayoritas pelanggan cuma datang
+//    buat kasih rating/komplain dan TIDAK pernah buka bagian ini -
+//    jadi mereka sama sekali tidak menanggung biaya loading gambar
+//    ikon apapun.
+// 2. Sekali dibuka, hasOpened TETAP true (tidak di-reset waktu
+//    ditutup lagi) - supaya tutup/buka berikutnya instan, tidak
+//    "loading ulang" (gambar sudah di-cache browser).
+// 3. Semua gambar ikon custom lewat cloudinaryThumbnail() - jadi yang
+//    didownload adalah versi kecil sudah terkompresi (~w_100px,
+//    format WebP/AVIF otomatis), BUKAN file asli hasil upload owner.
+//
+// Catatan animasi: buka/tutupnya TIDAK pakai conditional render biasa
+// (yang bikin transisi "patah" - langsung muncul/hilang), tapi pakai
+// trik CSS grid-template-rows 0fr <-> 1fr. Ini satu-satunya cara height
+// "auto" bisa di-transition dengan mulus tanpa harus ukur tinggi lewat
+// JS (ResizeObserver dsb) - jadi tetap ringan tapi peralihannya smooth
+// persis seperti komponen native app.
+function ConnectWithUs({ links }: { links: SocialLink[] }) {
+  const [open, setOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
+
+  if (!links || links.length === 0) return null;
+
+  function handleToggle() {
+    setOpen((v) => !v);
+    setHasOpened(true);
+  }
+
+  return (
+    <div className="mt-4 border-t border-black/[0.06] pt-3.5">
+      <button
+        type="button"
+        onClick={handleToggle}
+        aria-expanded={open}
+        className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-all duration-300 active:scale-[0.98] ${
+          open ? "bg-[#132320]/[0.035]" : "hover:bg-[#132320]/[0.025]"
+        }`}
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300"
+          style={{
+            background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+          }}
+        >
+          <Share2 className="h-4 w-4 text-white" />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12.5px] font-semibold leading-snug text-[#132320]">
+            Terhubung dengan Kami
+          </span>
+          <span className="block text-[10.5px] leading-snug text-[#132320]/45">
+            Instagram, Website, Katalog &amp; lainnya
+          </span>
+        </span>
+
+        <span
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
+            open ? "bg-[#132320] rotate-180" : "bg-[#132320]/[0.06]"
+          }`}
+        >
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-colors duration-300 ${
+              open ? "text-white" : "text-[#132320]/50"
+            }`}
+          />
+        </span>
+      </button>
+
+      {/* Wrapper grid 0fr/1fr - ini yang bikin tinggi kontennya bisa
+          di-transition mulus. Overflow-hidden di dalamnya mencegah
+          konten "meluber" selagi transisi berlangsung. */}
+      <div
+        className="grid transition-[grid-template-rows] duration-[350ms] ease-out"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-3.5 px-1 pb-1 pt-4">
+            {hasOpened &&
+              links.map((link, idx) => {
+              const meta = SOCIAL_PLATFORM_META[link.platform];
+              const Icon = meta.icon;
+              const hasCustomIcon = Boolean(link.icon_url);
+              return (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`group flex w-[68px] flex-col items-center gap-1.5 transition-all duration-300 ease-out ${
+                    open
+                      ? "translate-y-0 opacity-100"
+                      : "-translate-y-1.5 opacity-0"
+                  }`}
+                  style={{ transitionDelay: open ? `${idx * 45}ms` : "0ms" }}
+                >
+                  <span
+                    className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-[0_2px_6px_rgba(19,35,32,0.06)] ring-1 ring-black/[0.04] transition-all duration-300 ease-out group-hover:-translate-y-1 group-hover:shadow-[0_10px_18px_-6px_rgba(19,35,32,0.18)] group-active:scale-90"
+                    style={{
+                      backgroundColor: hasCustomIcon
+                        ? "white"
+                        : `color-mix(in srgb, ${meta.color} 12%, white)`,
+                    }}
+                  >
+                    {!hasCustomIcon && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 rounded-2xl opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-40"
+                        style={{ backgroundColor: meta.color }}
+                      />
+                    )}
+                    {hasCustomIcon ? (
+                      // Ikon custom hasil upload owner sendiri (logo
+                      // toko, ikon brand, dll) - bukan ikon bawaan.
+                      // loading="lazy" + versi thumbnail kecil (bukan
+                      // file asli) supaya tetap ringan meski tautannya
+                      // banyak.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={cloudinaryThumbnail(link.icon_url!, "f_auto,q_auto,w_100")}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="relative h-8 w-8 object-contain transition-transform duration-300 group-hover:scale-110"
+                      />
+                    ) : (
+                      <Icon
+                        className="relative h-[19px] w-[19px] transition-transform duration-300 group-hover:scale-110"
+                        style={{ color: meta.color }}
+                      />
+                    )}
+                  </span>
+                  <span className="line-clamp-2 text-center text-[10px] font-medium leading-[1.2] text-[#132320]/70 transition-colors duration-200 group-hover:text-[#132320]">
+                    {socialLinkDisplayLabel(link)}
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Font pairing ala app premium (Linear/Stripe/Typeform): Space
 // Grotesk ("--font-display") CUMA dipakai untuk 2 elemen identitas -
@@ -601,6 +766,8 @@ export function FeedbackCard({ product }: { product: Product }) {
               )}
             </div>
           )}
+
+          <ConnectWithUs links={product.social_links ?? []} />
         </CardContent>
       </Card>
     </div>
