@@ -11,6 +11,7 @@ import {
   Trash2,
   Pencil,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ import {
 
 type Product = {
   id: string;
+  short_code: string;
   business_name: string | null;
   google_review_url: string | null;
   owner_whatsapp: string | null;
@@ -450,6 +452,35 @@ export function SettingsForm({ product }: { product: Product }) {
           </p>
         </div>
       </div>
+
+      {/* Preview instan halaman feedback pelanggan - link RELATIF ke
+          /r/[shortCode] (URL yang sama persis dengan yang dibuka
+          pelanggan lewat QR code), jadi owner tidak perlu scan QR
+          cuma buat lihat/tes halamannya sendiri. target="_blank" biar
+          dashboard-nya tidak ikut ke-tinggal. */}
+      <a
+        href={`/r/${product.short_code}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group flex items-center gap-3 rounded-xl border border-black/[0.06] bg-[#F6F8F7] p-3 transition-colors duration-200 hover:border-[var(--brand)]/30 hover:bg-[var(--brand)]/[0.05]"
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm transition-transform duration-200 group-hover:scale-105"
+          style={{
+            background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+          }}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-semibold text-[#132320]">
+            Lihat Halaman Feedback
+          </span>
+          <span className="block text-[11px] text-[#132320]/50">
+            Buka tampilan yang dilihat pelanggan - tanpa perlu scan QR
+          </span>
+        </span>
+      </a>
 
       <div className="space-y-5 border-t border-black/[0.06] pt-5">
         <div>
