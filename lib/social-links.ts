@@ -120,6 +120,43 @@ export const SOCIAL_PLATFORM_ORDER: SocialPlatform[] = [
   "other",
 ];
 
+// Platform yang dianggap "akun media sosial" - ditampilkan sebagai
+// baris ikon kecil bulat di BAWAH (ala Linktree: Facebook/Instagram/
+// TikTok/dst berjejer kecil di bawah daftar tombol utama). Sisanya
+// (website, katalog, shopee, lainnya) dianggap "tautan konten/CTA" -
+// ditampilkan sebagai pill besar di ATAS supaya lebih menonjol, karena
+// biasanya itu yang paling ingin didorong owner (katalog produk, promo,
+// toko online) dibanding sekadar akun sosial.
+const SOCIAL_ICON_ROW_PLATFORMS: ReadonlySet<SocialPlatform> = new Set([
+  "instagram",
+  "tiktok",
+  "facebook",
+  "youtube",
+  "whatsapp",
+]);
+
+export function isSocialIconPlatform(platform: SocialPlatform): boolean {
+  return SOCIAL_ICON_ROW_PLATFORMS.has(platform);
+}
+
+// Pisahkan array tautan jadi 2 kelompok sesuai kategori di atas, sambil
+// tetap menjaga urutan asli di masing-masing kelompok.
+export function splitSocialLinksByGroup(links: SocialLink[]): {
+  mainLinks: SocialLink[];
+  iconLinks: SocialLink[];
+} {
+  const mainLinks: SocialLink[] = [];
+  const iconLinks: SocialLink[] = [];
+  for (const link of links) {
+    if (isSocialIconPlatform(link.platform)) {
+      iconLinks.push(link);
+    } else {
+      mainLinks.push(link);
+    }
+  }
+  return { mainLinks, iconLinks };
+}
+
 // Dipakai buat kasih id unik ke row baru di form dashboard (cukup
 // unik di sisi client, tidak perlu UUID beneran - tidak disimpan
 // terpisah, cuma properti dalam 1 array JSON).
