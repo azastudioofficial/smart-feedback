@@ -23,7 +23,7 @@ import {
   MessageSquareCheck,
   Loader2,
   ChevronLeft,
-  ChevronDown,
+  ChevronUp,
   ImagePlus,
   X,
   ShieldCheck,
@@ -42,6 +42,7 @@ import { submitFeedback, logPositiveClick } from "./actions";
 import {
   SOCIAL_PLATFORM_META,
   socialLinkDisplayLabel,
+  splitSocialLinksByGroup,
   type SocialLink,
 } from "@/lib/social-links";
 
@@ -55,160 +56,295 @@ type Product = {
   social_links?: SocialLink[] | null;
 };
 
-// Bagian "Terhubung dengan Kami" di paling bawah kartu - collapsed
-// secara default, baru terbuka ke bawah begitu pelanggan mengetuk
-// headernya. Kalau toko belum isi tautan apapun di Pengaturan,
-// komponen ini sengaja tidak me-render apapun (return null) supaya
-// kartu tidak terlihat ada bagian kosong/rusak.
+// "Terhubung dengan Kami" - dibuat sebagai BOTTOM SHEET (panel yang
+// meluncur naik dari bawah, menutupi sebagian layar), bukan accordion
+// kecil di dalam kartu. Pola ini yang dipakai Linktree/Instagram "Link
+// in Bio": tombol pemicu tetap kecil di footer kartu, tapi begitu
+// diklik, yang terbuka adalah panel penuh dengan foto profil toko di
+// atas + daftar tautan sebagai pill panjang (bukan bubble kecil) -
+// jauh lebih nyaman disentuh jarinya (target sentuh lebih besar) dan
+// lebih mudah dibaca labelnya dibanding grid ikon kecil.
 //
-// Catatan performa (PENTING - ini yang bikin bagian ini "murah" buat
-// dimuat, terlepas dari berapa banyak tautan/ikon custom yang dipasang
-// toko):
-// 1. hasOpened: daftar tombol link (termasuk gambar ikon custom) BARU
-//    di-render begitu pelanggan pertama kali mengetuk headernya -
-//    bukan langsung ikut ke-render (dan gambarnya ikut didownload)
-//    begitu halaman feedback dibuka. Mayoritas pelanggan cuma datang
-//    buat kasih rating/komplain dan TIDAK pernah buka bagian ini -
-//    jadi mereka sama sekali tidak menanggung biaya loading gambar
-//    ikon apapun.
-// 2. Sekali dibuka, hasOpened TETAP true (tidak di-reset waktu
-//    ditutup lagi) - supaya tutup/buka berikutnya instan, tidak
-//    "loading ulang" (gambar sudah di-cache browser).
-// 3. Semua gambar ikon custom lewat cloudinaryThumbnail() - jadi yang
-//    didownload adalah versi kecil sudah terkompresi (~w_100px,
-//    format WebP/AVIF otomatis), BUKAN file asli hasil upload owner.
+// Kalau toko belum isi tautan apapun di Pengaturan, komponen ini
+// sengaja tidak me-render apapun (return null) supaya kartu tidak
+// terlihat ada bagian kosong/rusak.
 //
-// Catatan animasi: buka/tutupnya TIDAK pakai conditional render biasa
-// (yang bikin transisi "patah" - langsung muncul/hilang), tapi pakai
-// trik CSS grid-template-rows 0fr <-> 1fr. Ini satu-satunya cara height
-// "auto" bisa di-transition dengan mulus tanpa harus ukur tinggi lewat
-// JS (ResizeObserver dsb) - jadi tetap ringan tapi peralihannya smooth
-// persis seperti komponen native app.
-function ConnectWithUs({ links }: { links: SocialLink[] }) {
+// Catatan performa (tetap dipertahankan dari versi sebelumnya):
+// 1. hasOpened - daftar link (termasuk gambar ikon custom) BARU
+//    di-render begitu pelanggan pertama kali membuka sheet-nya, bukan
+//    langsung ikut dimuat begitu halaman feedback dibuka. Mayoritas
+//    pelanggan tidak pernah buka bagian ini sama sekali.
+// 2. Sekali dibuka, hasOpened TETAP true - tutup/buka berikutnya
+//    instan (gambar sudah di-cache browser), tidak "loading ulang".
+// 3. Ikon custom lewat cloudinaryThumbnail() - yang didownload versi
+//    kecil terkompresi, bukan file asli hasil upload owner.
+//
+// Catatan aksesibilitas & kenyamanan akses:
+// - Body di-lock scroll-nya selagi sheet terbuka (biar halaman di
+//   belakang tidak ikut geser).
+// - Tombol Escape & tap di area gelap (backdrop) menutup sheet -
+//   bukan cuma tombol X, supaya nyaman dipakai dengan cara apapun.
+// - Target sentuh tiap pill setinggi 56px (h-14) - di atas standar
+//   minimum 44px yang direkomendasikan Apple/Google buat elemen yang
+//   nyaman disentuh jari, khususnya buat pelanggan yang lagi berdiri/
+//   buru-buru di toko (bukan duduk santai pegang HP).
+function ConnectWithUs({
+  links,
+  product,
+}: {
+  links: SocialLink[];
+  product: Product;
+}) {
   const [open, setOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
 
+  // Lock scroll body + tutup pakai tombol Escape - standar UX bottom
+  // sheet di app native maupun web modern.
+  useEffect(() => {
+    if (!open) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
   if (!links || links.length === 0) return null;
 
-  function handleToggle() {
-    setOpen((v) => !v);
+  const { mainLinks, iconLinks } = splitSocialLinksByGroup(links);
+
+  function handleOpen() {
+    setOpen(true);
     setHasOpened(true);
   }
 
   return (
-    <div className="mt-4 border-t border-black/[0.06] pt-3.5">
-      <button
-        type="button"
-        onClick={handleToggle}
-        aria-expanded={open}
-        className={`flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-all duration-300 active:scale-[0.98] ${
-          open ? "bg-[#132320]/[0.035]" : "hover:bg-[#132320]/[0.025]"
+    <>
+      {/* Tombol pemicu - tetap kompak, di footer kartu seperti biasa */}
+      <div className="mt-4 border-t border-black/[0.06] pt-3.5">
+        <button
+          type="button"
+          onClick={handleOpen}
+          aria-haspopup="dialog"
+          className="flex w-full items-center gap-3 rounded-2xl p-2.5 text-left transition-all duration-300 hover:bg-[#132320]/[0.025] active:scale-[0.98]"
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm"
+            style={{
+              background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+            }}
+          >
+            <Share2 className="h-4 w-4 text-white" />
+          </span>
+
+          <span className="min-w-0 flex-1">
+            <span className="block text-[12.5px] font-semibold leading-snug text-[#132320]">
+              Terhubung dengan Kami
+            </span>
+            <span className="block text-[10.5px] leading-snug text-[#132320]/45">
+              Instagram, Website, Katalog &amp; lainnya
+            </span>
+          </span>
+
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#132320]/[0.06]">
+            <ChevronUp className="h-3.5 w-3.5 text-[#132320]/50" />
+          </span>
+        </button>
+      </div>
+
+      {/* Backdrop gelap di belakang sheet - tap di sini juga menutup */}
+      <div
+        onClick={() => setOpen(false)}
+        aria-hidden="true"
+        className={`fixed inset-0 z-40 bg-[#0B1512]/55 backdrop-blur-sm transition-opacity duration-300 ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
+
+      {/* Sheet - meluncur naik dari bawah layar */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Terhubung dengan Kami"
+        className={`fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85vh] w-full max-w-sm flex-col rounded-t-[28px] bg-white shadow-[0_-20px_60px_-15px_rgba(19,35,32,0.35)] transition-transform duration-[380ms] ease-out ${
+          open ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm transition-transform duration-300"
-          style={{
-            background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
-          }}
+        {/* Drag handle - hint visual "bisa ditutup", walau interaksi
+            utamanya tetap lewat tombol X / backdrop / Escape. */}
+        <div className="flex shrink-0 justify-center pb-1 pt-2.5">
+          <span className="h-1 w-9 rounded-full bg-[#132320]/15" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Tutup"
+          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#132320]/[0.06] text-[#132320]/50 transition hover:bg-[#132320]/10 active:scale-90"
         >
-          <Share2 className="h-4 w-4 text-white" />
-        </span>
+          <X className="h-4 w-4" />
+        </button>
 
-        <span className="min-w-0 flex-1">
-          <span className="block text-[12.5px] font-semibold leading-snug text-[#132320]">
-            Terhubung dengan Kami
-          </span>
-          <span className="block text-[10.5px] leading-snug text-[#132320]/45">
-            Instagram, Website, Katalog &amp; lainnya
-          </span>
-        </span>
-
-        <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all duration-300 ${
-            open ? "bg-[#132320] rotate-180" : "bg-[#132320]/[0.06]"
-          }`}
-        >
-          <ChevronDown
-            className={`h-3.5 w-3.5 transition-colors duration-300 ${
-              open ? "text-white" : "text-[#132320]/50"
-            }`}
-          />
-        </span>
-      </button>
-
-      {/* Wrapper grid 0fr/1fr - ini yang bikin tinggi kontennya bisa
-          di-transition mulus. Overflow-hidden di dalamnya mencegah
-          konten "meluber" selagi transisi berlangsung. */}
-      <div
-        className="grid transition-[grid-template-rows] duration-[350ms] ease-out"
-        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-3.5 px-1 pb-1 pt-4">
-            {hasOpened &&
-              links.map((link, idx) => {
-              const meta = SOCIAL_PLATFORM_META[link.platform];
-              const Icon = meta.icon;
-              const hasCustomIcon = Boolean(link.icon_url);
-              return (
-                <a
-                  key={link.id}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`group flex w-[68px] flex-col items-center gap-1.5 transition-all duration-300 ease-out ${
-                    open
-                      ? "translate-y-0 opacity-100"
-                      : "-translate-y-1.5 opacity-0"
-                  }`}
-                  style={{ transitionDelay: open ? `${idx * 45}ms` : "0ms" }}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-6 pb-8 pt-1">
+          {/* Header profil - foto sampul ala Linktree: pakai logo toko
+              yang sama dengan di kartu utama, biar konsisten identitas
+              (bukan foto sampul lebar - avatar bundar lebih pas untuk
+              pola "profile card" seperti ini). */}
+          <div className="flex flex-col items-center pb-5 pt-2 text-center">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-white shadow-md ring-2 ring-[var(--brand)]/20">
+              {product.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={cloudinaryThumbnail(product.logo_url, "f_auto,q_auto,w_160")}
+                  alt={product.business_name ?? "Logo toko"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div
+                  className="flex h-full w-full items-center justify-center"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+                  }}
                 >
-                  <span
-                    className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-[0_2px_6px_rgba(19,35,32,0.06)] ring-1 ring-black/[0.04] transition-all duration-300 ease-out group-hover:-translate-y-1 group-hover:shadow-[0_10px_18px_-6px_rgba(19,35,32,0.18)] group-active:scale-90"
-                    style={{
-                      backgroundColor: hasCustomIcon
-                        ? "white"
-                        : `color-mix(in srgb, ${meta.color} 12%, white)`,
-                    }}
-                  >
-                    {!hasCustomIcon && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute inset-0 rounded-2xl opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-40"
-                        style={{ backgroundColor: meta.color }}
-                      />
-                    )}
-                    {hasCustomIcon ? (
-                      // Ikon custom hasil upload owner sendiri (logo
-                      // toko, ikon brand, dll) - bukan ikon bawaan.
-                      // loading="lazy" + versi thumbnail kecil (bukan
-                      // file asli) supaya tetap ringan meski tautannya
-                      // banyak.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={cloudinaryThumbnail(link.icon_url!, "f_auto,q_auto,w_100")}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="relative h-8 w-8 object-contain transition-transform duration-300 group-hover:scale-110"
-                      />
-                    ) : (
-                      <Icon
-                        className="relative h-[19px] w-[19px] transition-transform duration-300 group-hover:scale-110"
-                        style={{ color: meta.color }}
-                      />
-                    )}
-                  </span>
-                  <span className="line-clamp-2 text-center text-[10px] font-medium leading-[1.2] text-[#132320]/70 transition-colors duration-200 group-hover:text-[#132320]">
-                    {socialLinkDisplayLabel(link)}
-                  </span>
-                </a>
-              );
-            })}
+                  <Store className="h-6 w-6 text-white" />
+                </div>
+              )}
+            </div>
+            <p
+              className="mt-2.5 text-[14px] font-bold text-[#132320]"
+              style={DISPLAY}
+            >
+              {product.business_name}
+            </p>
+            <p className="mt-0.5 text-[10.5px] text-[#132320]/45">
+              Terhubung dengan Kami
+            </p>
           </div>
+
+          {/* Kelompok 1: tautan non-sosial (website/katalog/shopee/
+              lainnya) - pill panjang 1 kolom penuh, label selalu
+              terbaca lengkap, target sentuh besar & nyaman. Ini yang
+              paling ingin ditonjolkan owner (katalog, promo, toko
+              online), makanya ditaruh paling atas & paling besar. */}
+          {mainLinks.length > 0 && (
+            <div className="space-y-3">
+              {hasOpened &&
+                mainLinks.map((link, idx) => {
+                  const meta = SOCIAL_PLATFORM_META[link.platform];
+                  const Icon = meta.icon;
+                  const hasCustomIcon = Boolean(link.icon_url);
+                  return (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`group relative flex h-14 w-full items-center justify-center rounded-2xl border border-black/[0.05] bg-[#F6F8F7] shadow-[0_1px_2px_rgba(19,35,32,0.04)] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-[var(--brand)]/25 hover:bg-white hover:shadow-[0_12px_24px_-12px_rgba(19,35,32,0.2)] active:scale-[0.98] ${
+                        open
+                          ? "translate-y-0 opacity-100"
+                          : "translate-y-2 opacity-0"
+                      }`}
+                      style={{ transitionDelay: open ? `${idx * 50}ms` : "0ms" }}
+                    >
+                      <span
+                        className="absolute left-2 flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl transition-transform duration-300 group-hover:scale-105"
+                        style={{
+                          backgroundColor: hasCustomIcon
+                            ? "white"
+                            : `color-mix(in srgb, ${meta.color} 14%, white)`,
+                        }}
+                      >
+                        {hasCustomIcon ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={cloudinaryThumbnail(link.icon_url!, "f_auto,q_auto,w_100")}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="h-full w-full object-contain p-1"
+                          />
+                        ) : (
+                          <Icon
+                            className="h-[18px] w-[18px]"
+                            style={{ color: meta.color }}
+                          />
+                        )}
+                      </span>
+                      <span className="line-clamp-1 px-14 text-[13px] font-semibold text-[#132320] transition-colors group-hover:text-[var(--brand-dark)]">
+                        {socialLinkDisplayLabel(link)}
+                      </span>
+                    </a>
+                  );
+                })}
+            </div>
+          )}
+
+          {/* Kelompok 2: akun media sosial (Instagram/TikTok/Facebook/
+              YouTube/WhatsApp) - baris ikon bulat kecil berjejer di
+              BAWAH, persis pola Linktree. Cuma ikon (tanpa label
+              teks di bawahnya) karena platform-nya sudah umum
+              dikenali dari bentuk ikonnya saja. */}
+          {iconLinks.length > 0 && (
+            <div
+              className={`flex flex-wrap items-center justify-center gap-3 ${
+                mainLinks.length > 0 ? "mt-5 border-t border-black/[0.06] pt-5" : ""
+              }`}
+            >
+              {hasOpened &&
+                iconLinks.map((link, idx) => {
+                  const meta = SOCIAL_PLATFORM_META[link.platform];
+                  const Icon = meta.icon;
+                  const hasCustomIcon = Boolean(link.icon_url);
+                  const delayIdx = mainLinks.length + idx;
+                  return (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={socialLinkDisplayLabel(link)}
+                      aria-label={socialLinkDisplayLabel(link)}
+                      className={`group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-[0_1px_2px_rgba(19,35,32,0.04)] ring-1 ring-black/[0.05] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_20px_-10px_rgba(19,35,32,0.25)] active:scale-90 ${
+                        open
+                          ? "translate-y-0 opacity-100"
+                          : "translate-y-2 opacity-0"
+                      }`}
+                      style={{
+                        transitionDelay: open ? `${delayIdx * 50}ms` : "0ms",
+                        backgroundColor: hasCustomIcon
+                          ? "white"
+                          : `color-mix(in srgb, ${meta.color} 14%, white)`,
+                      }}
+                    >
+                      {hasCustomIcon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={cloudinaryThumbnail(link.icon_url!, "f_auto,q_auto,w_100")}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-contain p-1.5 transition-transform duration-300 group-hover:scale-110"
+                        />
+                      ) : (
+                        <Icon
+                          className="h-[19px] w-[19px] transition-transform duration-300 group-hover:scale-110"
+                          style={{ color: meta.color }}
+                        />
+                      )}
+                    </a>
+                  );
+                })}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -767,7 +903,7 @@ export function FeedbackCard({ product }: { product: Product }) {
             </div>
           )}
 
-          <ConnectWithUs links={product.social_links ?? []} />
+          <ConnectWithUs links={product.social_links ?? []} product={product} />
         </CardContent>
       </Card>
     </div>
