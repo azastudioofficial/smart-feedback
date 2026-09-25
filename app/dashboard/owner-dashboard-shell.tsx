@@ -17,6 +17,7 @@ import { FeedbackTable } from "./feedback-table";
 import { QrTab } from "./qr-tab";
 import { SettingsForm } from "./settings-form";
 import { useStore } from "./store-context";
+import type { SocialLink } from "@/lib/social-links";
 
 type Product = {
   id: string;
@@ -28,6 +29,7 @@ type Product = {
   cover_image_url: string | null;
   cover_position: string | null;
   brand_color: string | null;
+  social_links?: SocialLink[] | null;
 };
 
 type Feedback = {
