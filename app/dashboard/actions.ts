@@ -1,194 +1,61 @@
 "use server";
-// app/dashboard/actions.ts
+// app/actions/activation.ts
+// Dipakai oleh /admin/master (Super Admin) DAN /reseller (Reseller).
+// Karena pakai client yang IKUT SESI LOGIN (bukan service client),
+// RLS "owner_update_own_product" otomatis membatasi: reseller cuma
+// bisa approve/reject kartu yang reseller_id-nya = akun dia sendiri,
+// sementara Super Admin bisa untuk semua kartu. Tidak perlu
+// pengecekan manual tambahan di sini - keamanannya di level database.
 
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { extractCloudinaryPublicId } from "@/lib/utils";
 
 type ActionResult = { success: boolean; error?: string };
 
-/**
- * Hapus 1 foto dari Cloudinary lewat Admin API (butuh API Key+Secret,
- * beda dari upload yang unsigned dari browser).
- */
-async function deleteCloudinaryImage(publicId: string): Promise<void> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-  if (!cloudName || !apiKey || !apiSecret) return;
-
-  const auth = btoa(`${apiKey}:${apiSecret}`);
-  await fetch(
-    `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload?public_ids[]=${encodeURIComponent(
-      publicId
-    )}`,
-    { method: "DELETE", headers: { Authorization: `Basic ${auth}` } }
-  );
-}
-
-/**
- * Update pengaturan toko. Pakai client yang IKUT SESI LOGIN (bukan
- * service client) supaya RLS "owner_update_own_product" yang menentukan
- * boleh/tidaknya update - bukan kita yang cek manual di sini.
- */
-export async function updateSettings(
-  productId: string,
-  data: {
-    businessName: string;
-    googleReviewUrl: string;
-    ownerWhatsapp: string;
-    logoUrl?: string;
-    coverImageUrl?: string;
-    coverPosition?: string;
-    brandColor?: string;
-  }
+export async function approveActivation(
+  productId: string
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
-
-  const updatePayload: Record<string, string> = {
-    business_name: data.businessName,
-    google_review_url: data.googleReviewUrl,
-    owner_whatsapp: data.ownerWhatsapp,
-  };
-  if (data.logoUrl) {
-    updatePayload.logo_url = data.logoUrl;
-  }
-  if (data.coverImageUrl) {
-    updatePayload.cover_image_url = data.coverImageUrl;
-  }
-  if (data.coverPosition) {
-    // Dikirim tiap kali ada foto sampul aktif - termasuk waktu owner
-    // CUMA geser posisi tanpa ganti fotonya sama sekali.
-    updatePayload.cover_position = data.coverPosition;
-  }
-  if (data.brandColor) {
-    updatePayload.brand_color = data.brandColor;
-  }
 
   const { error } = await supabase
     .from("products")
-    .update(updatePayload)
+    .update({ is_active: true, pending_review: false })
     .eq("id", productId);
 
   if (error) {
-    console.error("Gagal update settings:", error.message);
-    return { success: false, error: "Gagal menyimpan pengaturan." };
+    console.error("Gagal approve aktivasi:", error.message);
+    return { success: false, error: "Gagal menyetujui aktivasi." };
   }
 
+  revalidatePath("/admin/master");
+  revalidatePath("/reseller");
   return { success: true };
 }
 
-/**
- * Hapus logo toko - baik dari Storage (file aslinya) maupun dari
- * kolom logo_url di database.
- */
-export async function removeLogo(
-  productId: string,
-  logoUrl: string
+export async function rejectActivation(
+  productId: string
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
-
-  if (logoUrl.includes("res.cloudinary.com")) {
-    // Logo baru (di Cloudinary) - hapus lewat Admin API
-    const publicId = extractCloudinaryPublicId(logoUrl);
-    if (publicId) {
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus logo dari Cloudinary:", err);
-        // Tidak fatal - tetap lanjut kosongkan logo_url
-      }
-    }
-  } else {
-    // Logo LAMA (masih di Supabase Storage, sebelum perbaikan ini)
-    const marker = "/business-logos/";
-    const idx = logoUrl.indexOf(marker);
-    if (idx !== -1) {
-      const path = logoUrl.slice(idx + marker.length);
-      const { error: storageError } = await supabase.storage
-        .from("business-logos")
-        .remove([path]);
-
-      if (storageError) {
-        console.error("Gagal hapus file logo lama:", storageError.message);
-      }
-    }
-  }
 
   const { error } = await supabase
     .from("products")
-    .update({ logo_url: null })
+    .update({
+      business_name: null,
+      google_review_url: null,
+      owner_whatsapp: null,
+      owner_id: null,
+      logo_url: null,
+      pending_review: false,
+      is_active: false,
+    })
     .eq("id", productId);
 
   if (error) {
-    console.error("Gagal hapus logo dari database:", error.message);
-    return { success: false, error: "Gagal menghapus logo." };
+    console.error("Gagal reject aktivasi:", error.message);
+    return { success: false, error: "Gagal menolak aktivasi." };
   }
 
+  revalidatePath("/admin/master");
+  revalidatePath("/reseller");
   return { success: true };
-}
-
-/**
- * Hapus foto sampul (cover) toko - sama persis polanya dengan
- * removeLogo(), cuma target kolomnya beda.
- */
-export async function removeCoverImage(
-  productId: string,
-  coverImageUrl: string
-): Promise<ActionResult> {
-  const supabase = await createServerSupabase();
-
-  if (coverImageUrl.includes("res.cloudinary.com")) {
-    const publicId = extractCloudinaryPublicId(coverImageUrl);
-    if (publicId) {
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus cover dari Cloudinary:", err);
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from("products")
-    .update({ cover_image_url: null, cover_position: null })
-    .eq("id", productId);
-
-  if (error) {
-    console.error("Gagal hapus cover dari database:", error.message);
-    return { success: false, error: "Gagal menghapus foto sampul." };
-  }
-
-  return { success: true };
-}
-
-/**
- * Tandai keluhan sebagai Pending/Resolved.
- * RLS "owner_update_own_feedbacks" yang menjamin owner cuma bisa
- * ubah keluhan milik tokonya sendiri.
- */
-export async function updateFeedbackStatus(
-  feedbackId: string,
-  status: "Pending" | "Resolved"
-): Promise<ActionResult> {
-  const supabase = await createServerSupabase();
-
-  const { error } = await supabase
-    .from("feedbacks")
-    .update({ status })
-    .eq("id", feedbackId);
-
-  if (error) {
-    console.error("Gagal update status feedback:", error.message);
-    return { success: false, error: "Gagal mengubah status." };
-  }
-
-  return { success: true };
-}
-
-export async function logout() {
-  const supabase = await createServerSupabase();
-  await supabase.auth.signOut();
-  redirect("/login");
 }
