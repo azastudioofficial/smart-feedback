@@ -1,21 +1,40 @@
 "use client";
 // app/dashboard/settings-form.tsx
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
-import { SlidersHorizontal, ImageIcon, Loader2 } from "lucide-react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  SlidersHorizontal,
+  ImageIcon,
+  Loader2,
+  Share2,
+  Plus,
+  Trash2,
+  Pencil,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   compressComplaintPhoto,
+  compressIconImage,
   uploadToCloudinaryWithProgress,
+  cloudinaryThumbnail,
 } from "@/lib/utils";
 import {
   updateSettings,
   removeLogo,
   removeCoverImage,
+  removeSocialIcon,
 } from "./actions";
 import { useStore } from "./store-context";
+import {
+  SOCIAL_PLATFORM_META,
+  SOCIAL_PLATFORM_ORDER,
+  newSocialLinkId,
+  type SocialLink,
+  type SocialPlatform,
+} from "@/lib/social-links";
 
 type Product = {
   id: string;
@@ -26,6 +45,7 @@ type Product = {
   cover_image_url: string | null;
   cover_position: string | null;
   brand_color: string | null;
+  social_links?: SocialLink[] | null;
 };
 
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
@@ -142,6 +162,120 @@ export function SettingsForm({ product }: { product: Product }) {
   const [brandColor, setBrandColor] = useState(
     product.brand_color || "#0E7C86"
   );
+
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>(
+    product.social_links ?? []
+  );
+
+  function handleAddSocialLink() {
+    setSocialLinks((prev) => [
+      ...prev,
+      { id: newSocialLinkId(), platform: "instagram", label: null, url: "" },
+    ]);
+  }
+
+  function handleRemoveSocialLink(id: string) {
+    const link = socialLinks.find((l) => l.id === id);
+    if (link?.icon_url) {
+      removeSocialIcon(link.icon_url);
+    }
+    setSocialLinks((prev) => prev.filter((link) => link.id !== id));
+  }
+
+  function handleSocialLinkPlatformChange(id: string, platform: SocialPlatform) {
+    setSocialLinks((prev) =>
+      prev.map((link) => (link.id === id ? { ...link, platform } : link))
+    );
+  }
+
+  function handleSocialLinkUrlChange(id: string, url: string) {
+    setSocialLinks((prev) =>
+      prev.map((link) => (link.id === id ? { ...link, url } : link))
+    );
+  }
+
+  function handleSocialLinkLabelChange(id: string, label: string) {
+    setSocialLinks((prev) =>
+      prev.map((link) => (link.id === id ? { ...link, label } : link))
+    );
+  }
+
+  // Upload ikon custom (opsional) per tautan. Beda dari Logo/Cover di
+  // atas yang uploadnya DITUNDA sampai klik "Simpan Pengaturan" - ikon
+  // di sini langsung diupload begitu dipilih (kayak ganti foto profil
+  // di app chat), supaya owner langsung lihat hasilnya di chip-nya
+  // tanpa perlu nunggu submit form dulu. Baris mana yang lagi diupload
+  // dilacak lewat uploadingIconId - dipakai buat nampilin spinner di
+  // chip yang tepat.
+  const iconFileInputRef = useRef<HTMLInputElement>(null);
+  const [iconUploadTargetId, setIconUploadTargetId] = useState<string | null>(
+    null
+  );
+  const [uploadingIconId, setUploadingIconId] = useState<string | null>(null);
+
+  function triggerIconUpload(id: string) {
+    setIconUploadTargetId(id);
+    iconFileInputRef.current?.click();
+  }
+
+  async function handleIconFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const targetId = iconUploadTargetId;
+    // Reset input-nya supaya file yang SAMA bisa dipilih lagi nanti
+    // (browser tidak trigger onChange kalau value-nya tidak berubah).
+    e.target.value = "";
+    if (!file || !targetId) return;
+
+    // Tolak file yang KELEWAT besar sebelum masuk proses kompresi -
+    // gambar sebesar ini (foto asli kamera dsb) cuma bikin browser
+    // lama di step kompresi tanpa manfaat, karena hasil akhirnya toh
+    // akan di-downscale jadi ikon kecil juga.
+    if (file.size > 12 * 1024 * 1024) {
+      alert("Ukuran gambar terlalu besar (maks 12MB). Coba gambar lain.");
+      return;
+    }
+
+    const previousIconUrl = socialLinks.find((l) => l.id === targetId)
+      ?.icon_url;
+
+    setUploadingIconId(targetId);
+    try {
+      // compressIconImage (bukan compressComplaintPhoto) - khusus
+      // dibuat sangat kecil (~30KB, 240px) karena cuma dipakai sebagai
+      // bubble ikon, bukan foto besar. Lihat lib/utils.ts.
+      const compressed = await compressIconImage(file);
+      const uploadedUrl = await uploadToCloudinaryWithProgress(
+        compressed,
+        () => {}
+      );
+      setSocialLinks((prev) =>
+        prev.map((link) =>
+          link.id === targetId ? { ...link, icon_url: uploadedUrl } : link
+        )
+      );
+      // Bersihkan ikon lama di Cloudinary (best-effort, tidak
+      // memblokir UI kalau gagal - lihat removeSocialIcon()).
+      if (previousIconUrl) {
+        removeSocialIcon(previousIconUrl);
+      }
+    } catch (err) {
+      alert(
+        err instanceof Error ? err.message : "Gagal mengupload ikon custom."
+      );
+    } finally {
+      setUploadingIconId(null);
+      setIconUploadTargetId(null);
+    }
+  }
+
+  function handleRemoveCustomIcon(id: string) {
+    const link = socialLinks.find((l) => l.id === id);
+    if (!link?.icon_url) return;
+    removeSocialIcon(link.icon_url);
+    setSocialLinks((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, icon_url: null } : l))
+    );
+  }
 
   async function handleRemoveLogo() {
     if (!logoPreview) return;
@@ -264,6 +398,7 @@ export function SettingsForm({ product }: { product: Product }) {
         // kesimpen.
         coverPosition: coverPreview ? `${coverPosX}% ${coverPosY}%` : undefined,
         brandColor,
+        socialLinks,
       });
 
       if (!result.success) {
@@ -480,6 +615,161 @@ export function SettingsForm({ product }: { product: Product }) {
               title="Warna custom"
             />
             <span className="text-xs text-[#132320]/50">{brandColor}</span>
+          </div>
+        </div>
+
+        {/* Connect with Us - daftar tautan (Instagram, Website, Katalog,
+            TikTok, Shopee, dst) yang muncul di halaman feedback
+            pelanggan sebagai bagian "Terhubung dengan Kami" - collapsible,
+            baru terbuka ke bawah kalau pelanggan klik. Kosongkan section
+            ini (hapus semua baris) kalau tidak mau bagian itu muncul
+            sama sekali di halaman pelanggan. */}
+        <div className="border-t border-black/[0.06] pt-5">
+          <Label className="gap-1.5">
+            <Share2 className="h-3.5 w-3.5 text-[#132320]/40" />
+            Connect with Us (Opsional)
+          </Label>
+          <p className="mt-1 text-xs text-[#132320]/45">
+            Tautan ini muncul sebagai bagian &quot;Terhubung dengan
+            Kami&quot; di halaman feedback pelanggan - baru terbuka ke
+            bawah waktu pelanggan mengetuknya. Klik ikon di kiri tiap
+            tautan kalau mau pakai gambar/logo sendiri, bukan ikon
+            bawaan.
+          </p>
+
+          <input
+            ref={iconFileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleIconFileSelected}
+          />
+
+          <div className="mt-3 space-y-2.5">
+            {socialLinks.map((link) => {
+              const meta = SOCIAL_PLATFORM_META[link.platform];
+              const Icon = meta.icon;
+              return (
+                <div
+                  key={link.id}
+                  className="group space-y-2 rounded-xl border border-black/[0.07] bg-[#F6F8F7] p-3 transition-colors duration-200 hover:border-black/[0.12]"
+                >
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => triggerIconUpload(link.id)}
+                      title="Klik untuk pakai ikon sendiri"
+                      disabled={uploadingIconId === link.id}
+                      className="group relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg ring-1 ring-black/[0.06] transition-colors duration-200"
+                      style={
+                        !link.icon_url
+                          ? {
+                              backgroundColor: `color-mix(in srgb, ${meta.color} 14%, white)`,
+                              color: meta.color,
+                            }
+                          : { backgroundColor: "white" }
+                      }
+                    >
+                      {uploadingIconId === link.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-[#132320]/50" />
+                      ) : link.icon_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={cloudinaryThumbnail(link.icon_url, "f_auto,q_auto,w_88")}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Icon className="h-4.5 w-4.5" />
+                      )}
+
+                      {/* Overlay ikon pensil - hint kalau chip ini bisa
+                          diklik untuk pakai ikon sendiri. */}
+                      {uploadingIconId !== link.id && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-opacity duration-150 group-hover:bg-black/40 group-hover:opacity-100">
+                          <Pencil className="h-3.5 w-3.5 text-white" />
+                        </span>
+                      )}
+                    </button>
+
+                    {link.icon_url && uploadingIconId !== link.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCustomIcon(link.id)}
+                        title="Pakai ikon default lagi"
+                        className="flex h-11 w-6 shrink-0 items-center justify-center text-[#132320]/30 transition hover:text-[#B5585E]"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+
+                    <select
+                      value={link.platform}
+                      onChange={(e) =>
+                        handleSocialLinkPlatformChange(
+                          link.id,
+                          e.target.value as SocialPlatform
+                        )
+                      }
+                      className="h-11 flex-1 rounded-lg border border-black/[0.1] bg-white px-2.5 text-sm text-[#132320] transition-colors duration-200 focus:border-[var(--brand)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--brand)]/15"
+                    >
+                      {SOCIAL_PLATFORM_ORDER.map((platform) => (
+                        <option key={platform} value={platform}>
+                          {SOCIAL_PLATFORM_META[platform].label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSocialLink(link.id)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[#132320]/40 transition hover:bg-black/[0.05] hover:text-[#B5585E]"
+                      title="Hapus tautan ini"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {link.platform === "other" && (
+                    <Input
+                      value={link.label ?? ""}
+                      onChange={(e) =>
+                        handleSocialLinkLabelChange(link.id, e.target.value)
+                      }
+                      placeholder="Nama tautan (mis. Linktree, Marketplace lain)"
+                      className="h-11 bg-white text-sm"
+                    />
+                  )}
+
+                  <Input
+                    value={link.url}
+                    onChange={(e) =>
+                      handleSocialLinkUrlChange(link.id, e.target.value)
+                    }
+                    placeholder={meta.placeholder}
+                    className="h-11 bg-white text-sm"
+                  />
+                </div>
+              );
+            })}
+
+            {socialLinks.length === 0 && (
+              <p className="rounded-xl border border-dashed border-black/[0.12] px-3.5 py-3 text-xs text-[#132320]/40">
+                Belum ada tautan. Tambahkan Instagram, Website, Katalog,
+                TikTok, Shopee, atau lainnya lewat tombol di bawah.
+              </p>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAddSocialLink}
+              className="h-11 w-full gap-1.5 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Tambah Tautan
+            </Button>
           </div>
         </div>
 
