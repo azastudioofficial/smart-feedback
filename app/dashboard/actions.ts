@@ -4,8 +4,34 @@
 import { redirect } from "next/navigation";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
+import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
 
 type ActionResult = { success: boolean; error?: string };
+
+/**
+ * Hapus 1 file ikon custom (tautan Connect with Us) dari Cloudinary.
+ * Dipanggil best-effort saat owner ganti/hapus ikon custom - TIDAK
+ * menyentuh kolom social_links di database (itu tetap disimpan lewat
+ * updateSettings seperti biasa), cuma bersihkan file lamanya di
+ * Cloudinary supaya tidak menumpuk file yatim.
+ */
+export async function removeSocialIcon(iconUrl: string): Promise<ActionResult> {
+  if (!iconUrl.includes("res.cloudinary.com")) {
+    return { success: true };
+  }
+
+  const publicId = extractCloudinaryPublicId(iconUrl);
+  if (publicId) {
+    try {
+      await deleteCloudinaryImage(publicId);
+    } catch (err) {
+      console.error("Gagal hapus ikon custom dari Cloudinary:", err);
+      // Tidak fatal - owner tetap bisa lanjut ganti/hapus ikonnya.
+    }
+  }
+
+  return { success: true };
+}
 
 /**
  * Hapus 1 foto dari Cloudinary lewat Admin API (butuh API Key+Secret,
@@ -42,11 +68,12 @@ export async function updateSettings(
     coverImageUrl?: string;
     coverPosition?: string;
     brandColor?: string;
+    socialLinks?: SocialLink[];
   }
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  const updatePayload: Record<string, string> = {
+  const updatePayload: Record<string, unknown> = {
     business_name: data.businessName,
     google_review_url: data.googleReviewUrl,
     owner_whatsapp: data.ownerWhatsapp,
@@ -64,6 +91,12 @@ export async function updateSettings(
   }
   if (data.brandColor) {
     updatePayload.brand_color = data.brandColor;
+  }
+  if (data.socialLinks) {
+    // Selalu dikirim (bahkan array kosong) - supaya owner yang
+    // menghapus SEMUA tautan lama tetap kesimpen kosong, bukan malah
+    // dianggap "tidak berubah" dan tetap pakai data lama.
+    updatePayload.social_links = sanitizeSocialLinks(data.socialLinks);
   }
 
   const { error } = await supabase
