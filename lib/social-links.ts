@@ -11,9 +11,9 @@
 // migrasi kolom baru tiap kali ada platform baru.
 
 import {
-  Instagram,
-  Facebook,
-  Youtube,
+  Camera,
+  ThumbsUp,
+  PlayCircle,
   Globe,
   ShoppingBag,
   BookOpen,
@@ -54,7 +54,7 @@ export const SOCIAL_PLATFORM_META: Record<
 > = {
   instagram: {
     label: "Instagram",
-    icon: Instagram,
+    icon: Camera,
     color: "#C13584",
     placeholder: "https://instagram.com/nama-toko",
   },
@@ -84,13 +84,13 @@ export const SOCIAL_PLATFORM_META: Record<
   },
   facebook: {
     label: "Facebook",
-    icon: Facebook,
+    icon: ThumbsUp,
     color: "#1877F2",
     placeholder: "https://facebook.com/nama-toko",
   },
   youtube: {
     label: "YouTube",
-    icon: Youtube,
+    icon: PlayCircle,
     color: "#FF0000",
     placeholder: "https://youtube.com/@nama-toko",
   },
