@@ -75,6 +75,39 @@ export async function compressComplaintPhoto(file: File): Promise<File> {
 }
 
 /**
+ * Kompresi khusus untuk IKON CUSTOM di fitur "Connect with Us".
+ * Beda dari compressComplaintPhoto/logo di atas - ini dipakai sebagai
+ * ikon bubble kecil (max ~56px di halaman pelanggan), jadi TIDAK perlu
+ * resolusi besar sama sekali. Target ukuran sengaja dibuat sangat
+ * kecil (~30KB, sisi terpanjang 240px) supaya:
+ * 1. Tidak numpuk kuota storage Cloudinary kalau banyak toko upload
+ *    ikon custom.
+ * 2. Halaman feedback pelanggan tetap ringan & cepat dimuat meski
+ *    toko punya banyak tautan dengan ikon custom semua.
+ */
+export async function compressIconImage(file: File): Promise<File> {
+  const options = {
+    maxSizeMB: 0.03, // ~30 KB - cukup buat ikon bulat kecil, tidak lebih
+    maxWidthOrHeight: 240,
+    useWebWorker: true,
+    fileType: "image/webp" as const,
+    initialQuality: 0.85,
+  };
+
+  try {
+    const compressed = await imageCompression(file, options);
+    return new File(
+      [compressed],
+      `icon-${crypto.randomUUID()}.webp`,
+      { type: "image/webp" }
+    );
+  } catch (err) {
+    console.error("Gagal kompresi ikon:", err);
+    throw new Error("Gagal memproses gambar ikon. Coba gunakan gambar lain.");
+  }
+}
+
+/**
  * Upload foto (yang sudah dikompres) ke Cloudinary lewat Unsigned
  * Upload Preset - proses ini murni terjadi di browser, tidak lewat
  * server kita sama sekali. Mengembalikan secure_url dari Cloudinary.
