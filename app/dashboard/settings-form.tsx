@@ -32,7 +32,7 @@ import { useStore } from "./store-context";
 import {
   SOCIAL_PLATFORM_META,
   SOCIAL_PLATFORM_ORDER,
-  isSocialIconPlatform,
+  resolveDisplayGroup,
   newSocialLinkId,
   type SocialLink,
   type SocialPlatform,
@@ -188,6 +188,19 @@ export function SettingsForm({ product }: { product: Product }) {
   function handleSocialLinkPlatformChange(id: string, platform: SocialPlatform) {
     setSocialLinks((prev) =>
       prev.map((link) => (link.id === id ? { ...link, platform } : link))
+    );
+  }
+
+  // Owner memaksa tautan ini tampil di kelompok "main" (pill di atas)
+  // atau "icon" (baris ikon di bawah), menimpa default bawaan platform.
+  function handleSocialLinkGroupChange(
+    id: string,
+    group: "main" | "icon"
+  ) {
+    setSocialLinks((prev) =>
+      prev.map((link) =>
+        link.id === id ? { ...link, display_group: group } : link
+      )
     );
   }
 
@@ -664,12 +677,13 @@ export function SettingsForm({ product }: { product: Product }) {
           <p className="mt-1 text-xs text-[#132320]/45">
             Tautan ini muncul sebagai bagian &quot;Terhubung dengan
             Kami&quot; di halaman feedback pelanggan - baru terbuka ke
-            bawah waktu pelanggan mengetuknya. Website/Katalog/Shopee
-            dkk tampil sebagai tombol panjang di atas, sedangkan akun
-            sosial (Instagram/TikTok/dst) tampil sebagai ikon kecil di
-            bawahnya - lihat keterangan di tiap tautan. Klik ikon di
-            kiri tiap tautan kalau mau pakai gambar/logo sendiri, bukan
-            ikon bawaan.
+            bawah waktu pelanggan mengetuknya. Defaultnya Website/
+            Katalog/Shopee dkk jadi tombol panjang di atas, akun sosial
+            (Instagram/TikTok/dst) jadi ikon kecil di bawahnya - tapi
+            bisa kamu ubah manual sendiri lewat tombol &quot;Tombol di
+            atas&quot; / &quot;Ikon di bawah&quot; di tiap tautan. Klik
+            ikon di kiri tiap tautan kalau mau pakai gambar/logo
+            sendiri, bukan ikon bawaan.
           </p>
 
           <input
@@ -766,22 +780,47 @@ export function SettingsForm({ product }: { product: Product }) {
                     </button>
                   </div>
 
-                  {/* Kasih tau owner di grup mana tautan ini bakal nongol
-                      di halaman feedback - biar tidak bingung kenapa ada
-                      yang jadi tombol panjang, ada yang jadi ikon kecil. */}
-                  <p className="flex items-center gap-1 pl-0.5 text-[11px] text-[#132320]/40">
-                    {isSocialIconPlatform(link.platform) ? (
-                      <>
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#132320]/25" />
-                        Tampil sebagai ikon kecil di baris bawah
-                      </>
-                    ) : (
-                      <>
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]/50" />
-                        Tampil sebagai tombol panjang di atas
-                      </>
-                    )}
-                  </p>
+                  {/* Owner bisa PAKSA tautan ini tampil di kelompok mana
+                      pun - defaultnya sudah ditentukan otomatis sesuai
+                      platform, tapi tombol ini bisa menimpanya. */}
+                  {(() => {
+                    const group = resolveDisplayGroup(link);
+                    return (
+                      <div className="flex items-center gap-1.5 pl-0.5">
+                        <span className="text-[11px] text-[#132320]/40">
+                          Tampil sebagai:
+                        </span>
+                        <div className="flex overflow-hidden rounded-md border border-black/[0.1]">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSocialLinkGroupChange(link.id, "main")
+                            }
+                            className={`px-2 py-1 text-[11px] font-medium transition-colors ${
+                              group === "main"
+                                ? "bg-[var(--brand)] text-white"
+                                : "bg-white text-[#132320]/50 hover:bg-black/[0.03]"
+                            }`}
+                          >
+                            Tombol di atas
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleSocialLinkGroupChange(link.id, "icon")
+                            }
+                            className={`border-l border-black/[0.1] px-2 py-1 text-[11px] font-medium transition-colors ${
+                              group === "icon"
+                                ? "bg-[var(--brand)] text-white"
+                                : "bg-white text-[#132320]/50 hover:bg-black/[0.03]"
+                            }`}
+                          >
+                            Ikon di bawah
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {link.platform === "other" && (
                     <Input
