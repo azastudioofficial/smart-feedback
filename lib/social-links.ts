@@ -46,6 +46,11 @@ export type SocialLink = {
   // logo toko sendiri, bukan ikon Instagram generik). URL Cloudinary,
   // sama seperti logo_url/cover_image_url toko.
   icon_url?: string | null;
+  // Override manual owner untuk kelompok tampilan (pill panjang di
+  // atas / ikon kecil di bawah). Kalau null/kosong, ikut default
+  // platform-nya (lihat isSocialIconPlatform) - owner cuma perlu isi
+  // ini kalau mau MEMAKSA beda dari default itu.
+  display_group?: "main" | "icon" | null;
 };
 
 export const SOCIAL_PLATFORM_META: Record<
@@ -139,8 +144,18 @@ export function isSocialIconPlatform(platform: SocialPlatform): boolean {
   return SOCIAL_ICON_ROW_PLATFORMS.has(platform);
 }
 
-// Pisahkan array tautan jadi 2 kelompok sesuai kategori di atas, sambil
-// tetap menjaga urutan asli di masing-masing kelompok.
+// Kelompok tampilan tautan ini SEBENARNYA - pakai override owner
+// (display_group) kalau diisi, kalau tidak baru fallback ke default
+// bawaan platform-nya.
+export function resolveDisplayGroup(link: SocialLink): "main" | "icon" {
+  if (link.display_group === "main" || link.display_group === "icon") {
+    return link.display_group;
+  }
+  return isSocialIconPlatform(link.platform) ? "icon" : "main";
+}
+
+// Pisahkan array tautan jadi 2 kelompok sesuai resolveDisplayGroup di
+// atas, sambil tetap menjaga urutan asli di masing-masing kelompok.
 export function splitSocialLinksByGroup(links: SocialLink[]): {
   mainLinks: SocialLink[];
   iconLinks: SocialLink[];
@@ -148,7 +163,7 @@ export function splitSocialLinksByGroup(links: SocialLink[]): {
   const mainLinks: SocialLink[] = [];
   const iconLinks: SocialLink[] = [];
   for (const link of links) {
-    if (isSocialIconPlatform(link.platform)) {
+    if (resolveDisplayGroup(link) === "icon") {
       iconLinks.push(link);
     } else {
       mainLinks.push(link);
