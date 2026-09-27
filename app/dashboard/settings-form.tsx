@@ -32,6 +32,7 @@ import { useStore } from "./store-context";
 import {
   SOCIAL_PLATFORM_META,
   SOCIAL_PLATFORM_ORDER,
+  isSocialIconPlatform,
   newSocialLinkId,
   type SocialLink,
   type SocialPlatform,
@@ -663,9 +664,12 @@ export function SettingsForm({ product }: { product: Product }) {
           <p className="mt-1 text-xs text-[#132320]/45">
             Tautan ini muncul sebagai bagian &quot;Terhubung dengan
             Kami&quot; di halaman feedback pelanggan - baru terbuka ke
-            bawah waktu pelanggan mengetuknya. Klik ikon di kiri tiap
-            tautan kalau mau pakai gambar/logo sendiri, bukan ikon
-            bawaan.
+            bawah waktu pelanggan mengetuknya. Website/Katalog/Shopee
+            dkk tampil sebagai tombol panjang di atas, sedangkan akun
+            sosial (Instagram/TikTok/dst) tampil sebagai ikon kecil di
+            bawahnya - lihat keterangan di tiap tautan. Klik ikon di
+            kiri tiap tautan kalau mau pakai gambar/logo sendiri, bukan
+            ikon bawaan.
           </p>
 
           <input
@@ -761,6 +765,23 @@ export function SettingsForm({ product }: { product: Product }) {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+
+                  {/* Kasih tau owner di grup mana tautan ini bakal nongol
+                      di halaman feedback - biar tidak bingung kenapa ada
+                      yang jadi tombol panjang, ada yang jadi ikon kecil. */}
+                  <p className="flex items-center gap-1 pl-0.5 text-[11px] text-[#132320]/40">
+                    {isSocialIconPlatform(link.platform) ? (
+                      <>
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#132320]/25" />
+                        Tampil sebagai ikon kecil di baris bawah
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--brand)]/50" />
+                        Tampil sebagai tombol panjang di atas
+                      </>
+                    )}
+                  </p>
 
                   {link.platform === "other" && (
                     <Input
