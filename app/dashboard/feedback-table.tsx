@@ -64,21 +64,59 @@ function daysUntilDeleted(createdAt: string): number {
 
 // Susun isi CSV (tanpa BOM) - dipakai baik untuk download CSV polos
 // maupun buat ditaruh di dalam ZIP bareng foto-fotonya.
-function buildCsvContent(items: Feedback[]): string {
-  const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+//
+// Rapi di Excel: pemisah ";" (standar Excel Indonesia) + baris "sep=;"
+// supaya kolom terpisah benar di Excel apa pun pengaturan bahasanya.
+// (Kalau dibuka di Google Sheets, hapus saja baris pertama itu.)
+//
+// Aman: teks dari pelanggan yang diawali = + - @ diberi tanda ' di
+// depan supaya Excel tidak menjalankannya sebagai rumus.
+function csvText(value: string | null | undefined): string {
+  const oneLine = (value ?? "").replace(/\s*[\r\n]+\s*/g, " ").trim();
+  return /^[=+\-@\t]/.test(oneLine) ? `'${oneLine}` : oneLine;
+}
 
-  const header = ["Tanggal", "Nama", "Anonim", "Pesan", "Status", "Link Foto"];
+// Format yyyy-mm-dd hh:mm (jam lokal) - dikenali Excel sebagai tanggal
+// sungguhan, jadi bisa diurutkan & difilter.
+function csvDate(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(
+    d.getHours()
+  )}:${p(d.getMinutes())}`;
+}
 
-  const rows = items.map((f) => [
-    new Date(f.created_at).toLocaleString("id-ID"),
-    f.is_anonymous ? "" : f.customer_name || "-",
-    f.is_anonymous ? "Ya" : "Tidak",
-    f.complaint_text,
-    f.status,
-    f.photo_url ?? "",
-  ]);
+// photoFiles (opsional, mode ZIP): id keluhan -> nama file di folder foto/,
+// supaya tiap baris bisa dicocokkan dengan file fotonya.
+function buildCsvContent(
+  items: Feedback[],
+  photoFiles?: Map<string, string>
+): string {
+  const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
-  return [header, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+  const header = ["No", "Tanggal", "Nama", "Pesan", "Status", "Link Foto"];
+  if (photoFiles) header.push("File Foto (di ZIP)");
+
+  const rows = items.map((f, i) => {
+    const row = [
+      String(i + 1),
+      csvDate(f.created_at),
+      f.is_anonymous ? "Anonim" : csvText(f.customer_name) || "-",
+      csvText(f.complaint_text),
+      f.status,
+      csvText(f.photo_url),
+    ];
+    if (photoFiles) {
+      const file = photoFiles.get(f.id);
+      row.push(file ? `foto/${file}` : "");
+    }
+    return row;
+  });
+
+  return (
+    "sep=;\r\n" +
+    [header, ...rows].map((row) => row.map(cell).join(";")).join("\r\n")
+  );
 }
 
 // Komponen kecil di bawah ini SENGAJA ditaruh di luar FeedbackTable.
@@ -322,46 +360,45 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
   // ada walau file di Cloudinary sudah dihapus cron cleanup.
   async function handleDownloadZip() {
     setDownloadingZip(true);
+    const withPhoto = items.filter((f) => f.photo_url);
     setZipProgress({
       phase: "foto",
       done: 0,
-      total: items.filter((f) => f.photo_url).length,
+      total: withPhoto.length,
       failed: 0,
     });
     try {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
-
-      zip.file(
-        "rekap-keluhan.csv",
-        "\uFEFF" + buildCsvContent(items)
-      );
-
       const photoFolder = zip.folder("foto");
-      const withPhoto = items.filter((f) => f.photo_url);
+
+      // Nama file foto ditentukan DI AWAL supaya kolom "File Foto" di
+      // CSV bisa mencocokkan tiap keluhan dengan file fotonya.
+      const photoNames = new Map<string, string>();
+      withPhoto.forEach((f, i) => {
+        // Ambil ekstensi dari URL aslinya kalau ada, fallback .jpg.
+        const match = (f.photo_url as string).match(/\.(\w{3,4})(?:\?|$)/);
+        const ext = match ? match[1] : "jpg";
+        const dateStr = new Date(f.created_at).toISOString().slice(0, 10);
+        const namePart = (f.customer_name || "anonim")
+          .replace(/[^a-zA-Z0-9]+/g, "-")
+          .slice(0, 30);
+        photoNames.set(f.id, `${dateStr}_${namePart}_${i + 1}.${ext}`);
+      });
+
+      // Hanya foto yang BERHASIL diunduh yang dicatat di CSV.
+      const okPhotos = new Map<string, string>();
 
       await Promise.allSettled(
-        withPhoto.map(async (f, i) => {
+        withPhoto.map(async (f) => {
           try {
-          const res = await fetch(f.photo_url as string);
-          if (!res.ok) throw new Error("fetch gagal");
-          const blob = await res.blob();
-
-          // Ambil ekstensi dari URL aslinya kalau ada, fallback .jpg.
-          const match = (f.photo_url as string).match(/\.(\w{3,4})(?:\?|$)/);
-          const ext = match ? match[1] : "jpg";
-          const dateStr = new Date(f.created_at)
-            .toISOString()
-            .slice(0, 10);
-          const namePart = (f.customer_name || "anonim")
-            .replace(/[^a-zA-Z0-9]+/g, "-")
-            .slice(0, 30);
-
-          photoFolder?.file(
-            `${dateStr}_${namePart}_${i + 1}.${ext}`,
-            blob
-          );
-          setZipProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+            const res = await fetch(f.photo_url as string);
+            if (!res.ok) throw new Error("fetch gagal");
+            const blob = await res.blob();
+            const name = photoNames.get(f.id) as string;
+            photoFolder?.file(name, blob);
+            okPhotos.set(f.id, name);
+            setZipProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
           } catch {
             // Foto ini gagal diambil - dilewati, tapi tetap dihitung
             // supaya angka progres jalan terus sampai selesai.
@@ -370,6 +407,11 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
             );
           }
         })
+      );
+
+      zip.file(
+        "rekap-keluhan.csv",
+        "\uFEFF" + buildCsvContent(items, okPhotos)
       );
 
       setZipProgress((p) => (p ? { ...p, phase: "zip" } : p));
