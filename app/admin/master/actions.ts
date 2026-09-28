@@ -11,6 +11,8 @@ type ActionResult = { success: boolean; error?: string };
 
 type GeneratedItem = { id: string; short_code: string };
 
+export type Plan = "basic" | "pro";
+
 type InventoryItem = {
   id: string;
   short_code: string;
@@ -20,6 +22,7 @@ type InventoryItem = {
   is_active: boolean;
   is_suspended: boolean;
   pending_review: boolean;
+  plan: Plan;
   reseller_name: string | null;
   created_at: string;
 };
@@ -48,7 +51,7 @@ export async function getInventoryPage(
   const { data, error, count } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, created_at, resellers(name)",
+      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, resellers(name)",
       { count: "exact" }
     )
     .order("created_at", { ascending: false })
@@ -94,7 +97,8 @@ async function logAdminAction(
 export async function generateProducts(
   count: number,
   prefix: string = "",
-  resellerId: string | null = null
+  resellerId: string | null = null,
+  plan: Plan = "basic"
 ): Promise<{ success: boolean; data?: GeneratedItem[]; error?: string }> {
   const supabase = await createServerSupabase();
 
@@ -109,8 +113,150 @@ export async function generateProducts(
     return { success: false, error: error.message };
   }
 
+  const generated: GeneratedItem[] = data ?? [];
+
+  // Kartu baru otomatis Basic (default kolom). Kalau diminta Pro, naikkan
+  // sekarang lewat service client - RPC admin_generate_products tidak
+  // perlu diubah.
+  if (plan === "pro" && generated.length > 0) {
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData.user?.app_metadata?.role !== "super_admin") {
+      return { success: false, error: "Hanya Super Admin yang bisa membuat kartu Pro." };
+    }
+    const service = createServiceClient();
+    const { error: planError } = await service
+      .from("products")
+      .update({ plan: "pro" })
+      .in("id", generated.map((g) => g.id));
+
+    if (planError) {
+      console.error("Kartu dibuat, tapi gagal set paket Pro:", planError.message);
+      return {
+        success: false,
+        error: "Kartu berhasil dibuat tapi gagal diset ke Pro. Ubah manual lewat menu Semua Kartu.",
+      };
+    }
+  }
+
   revalidatePath("/admin/master");
-  return { success: true, data: data ?? [] };
+  return { success: true, data: generated };
+}
+
+/**
+ * Ubah paket (Basic/Pro) beberapa kartu sekaligus, berdasarkan id.
+ * HANYA Super Admin. Dicek di sini DAN di trigger database
+ * (protect_plan_column) - jadi tetap aman kalau action ini dipanggil
+ * dari luar UI.
+ */
+export async function setPlan(
+  productIds: string[],
+  plan: Plan
+): Promise<{ success: boolean; updated?: number; error?: string }> {
+  if (plan !== "basic" && plan !== "pro") {
+    return { success: false, error: "Paket tidak valid." };
+  }
+  const ids = Array.from(new Set(productIds)).filter(Boolean);
+  if (ids.length === 0) {
+    return { success: false, error: "Belum ada kartu yang dipilih." };
+  }
+
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.app_metadata?.role !== "super_admin") {
+    return { success: false, error: "Hanya Super Admin yang bisa mengubah paket." };
+  }
+
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("products")
+    .update({ plan })
+    .in("id", ids)
+    .select("id");
+
+  if (error) {
+    console.error("Gagal ubah paket:", error.message);
+    return { success: false, error: "Gagal mengubah paket." };
+  }
+
+  const updatedIds = (data ?? []).map((r) => r.id as string);
+  if (updatedIds.length > 0) {
+    await service.from("admin_actions").insert(
+      updatedIds.map((id) => ({
+        actor_id: user.id,
+        product_id: id,
+        action: plan === "pro" ? "upgrade_pro" : "downgrade_basic",
+        detail: { plan },
+      }))
+    );
+  }
+
+  revalidatePath("/admin/master");
+  revalidatePath("/reseller");
+  return { success: true, updated: updatedIds.length };
+}
+
+/**
+ * Upgrade/turunkan paket lewat DAFTAR KODE (short_code) yang ditempel,
+ * dipisah spasi, koma, atau baris baru. Berguna kalau kartunya tersebar
+ * di banyak halaman tabel. Mengembalikan kode yang tidak ditemukan.
+ */
+export async function setPlanByCodes(
+  rawCodes: string,
+  plan: Plan
+): Promise<{
+  success: boolean;
+  updated?: number;
+  notFound?: string[];
+  error?: string;
+}> {
+  const codes = Array.from(
+    new Set(
+      rawCodes
+        .split(/[\s,;]+/)
+        .map((c) => c.trim())
+        .filter(Boolean)
+        // Pengguna sering menempel URL penuh (.../r/KODE) - ambil kodenya saja.
+        .map((c) => c.replace(/^.*\/r\//i, ""))
+    )
+  );
+
+  if (codes.length === 0) {
+    return { success: false, error: "Tempel minimal satu kode kartu." };
+  }
+  if (codes.length > 500) {
+    return { success: false, error: "Maksimal 500 kode sekali proses." };
+  }
+
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.app_metadata?.role !== "super_admin") {
+    return { success: false, error: "Hanya Super Admin yang bisa mengubah paket." };
+  }
+
+  const service = createServiceClient();
+  const { data: found, error: findError } = await service
+    .from("products")
+    .select("id, short_code")
+    .in("short_code", codes);
+
+  if (findError) {
+    return { success: false, error: "Gagal mencari kartu." };
+  }
+
+  const foundCodes = new Set((found ?? []).map((f) => f.short_code as string));
+  const notFound = codes.filter((c) => !foundCodes.has(c));
+
+  const result = await setPlan(
+    (found ?? []).map((f) => f.id as string),
+    plan
+  );
+  if (!result.success) return { success: false, error: result.error };
+
+  return { success: true, updated: result.updated, notFound };
 }
 
 export async function toggleSuspend(
