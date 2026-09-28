@@ -25,7 +25,7 @@ export default async function ScanRoutePage({ params }: Props) {
 
   const { data: product, error } = await supabase
     .from("products")
-    .select("id, is_active, is_suspended")
+    .select("id, is_active, is_suspended, plan, google_review_url")
     .eq(isUuid ? "id" : "short_code", uid)
     .maybeSingle();
 
@@ -69,5 +69,27 @@ export default async function ScanRoutePage({ params }: Props) {
   // mau anti-spam analytics (lihat saran sebelumnya) — dilewat dulu
   // supaya halaman ini tetap sederhana untuk MVP.
 
+  // 4. Paket BASIC: tidak ada halaman feedback / keluhan - pelanggan
+  //    langsung dilempar ke Google Review. Scan tetap tercatat di atas.
+  if (product.plan !== "pro") {
+    if (product.google_review_url) {
+      redirect(product.google_review_url);
+    }
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-6">
+        <div className="max-w-sm text-center">
+          <h1 className="text-xl font-semibold text-neutral-800">
+            Link Review Belum Diatur
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Toko ini belum mengisi link Google Review. Silakan hubungi
+            pemilik toko.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // 5. Paket PRO: halaman feedback lengkap.
   redirect(`/feedback/${product.id}`);
 }
