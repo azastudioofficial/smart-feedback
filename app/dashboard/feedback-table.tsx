@@ -2,7 +2,15 @@
 // app/dashboard/feedback-table.tsx
 
 import { useState } from "react";
-import { Inbox, Download, FolderDown, Loader2, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Inbox,
+  Download,
+  FolderDown,
+  Loader2,
+  Clock,
+  Trash2,
+} from "lucide-react";
 import { saveAs } from "file-saver";
 import {
   Table,
@@ -13,10 +21,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cloudinaryThumbnail } from "@/lib/utils";
-import { updateFeedbackStatus } from "./actions";
+import { updateFeedbackStatus, deleteFeedback } from "./actions";
 
 type Feedback = {
   id: string;
@@ -151,11 +167,57 @@ function StatusButton({
   );
 }
 
+// Tanggal & jam dipisah jadi 2 baris supaya kolom tanggal tidak perlu
+// lebar dan tidak menabrak kolom nama di sebelahnya.
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function DeleteButton({
+  f,
+  onDelete,
+  labeled = false,
+}: {
+  f: Feedback;
+  onDelete: (f: Feedback) => void;
+  labeled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onDelete(f)}
+      aria-label="Hapus keluhan"
+      title="Hapus keluhan"
+      className={`flex items-center justify-center gap-1.5 rounded-lg text-[#B5585E] transition hover:bg-[#B5585E]/10 ${
+        labeled ? "h-9 px-3 text-xs font-medium" : "h-9 w-9"
+      }`}
+    >
+      <Trash2 className="h-4 w-4" />
+      {labeled && "Hapus"}
+    </button>
+  );
+}
+
 export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
   const [items, setItems] = useState(feedbacks);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
+  const router = useRouter();
   const [downloadingZip, setDownloadingZip] = useState(false);
+  // Keluhan yang sedang menunggu konfirmasi hapus.
+  const [deleteTarget, setDeleteTarget] = useState<Feedback | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Keterangan proses ZIP supaya owner tahu sudah berjalan:
   // fase "foto" = lagi ambil foto satu-satu (done/total),
   // fase "zip" = semua foto sudah terambil, lagi disusun jadi 1 file.
@@ -208,6 +270,31 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
       );
       alert(result.error ?? "Gagal mengubah status.");
     }
+  }
+
+  function openDeleteDialog(f: Feedback) {
+    setDeleteError(null);
+    setDeleteTarget(f);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+
+    const result = await deleteFeedback(deleteTarget.id);
+    setDeleting(false);
+
+    if (!result.success) {
+      setDeleteError(result.error ?? "Gagal menghapus keluhan.");
+      return;
+    }
+
+    setItems((prev) => prev.filter((f) => f.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    // Segarkan data server supaya angka badge "Rekap Keluhan" di menu
+    // samping ikut berkurang.
+    router.refresh();
   }
 
   // Backup manual sebelum kena hapus otomatis - keluhan yang lebih tua
@@ -394,59 +481,82 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
         </div>
       )}
 
-      {/* Tampilan HP / layar sempit: kartu bertumpuk, tanpa scroll
-          horizontal, lebih enak dibaca & disentuh jari. */}
-      <div className="flex flex-col gap-3 md:hidden">
+      {/* Tampilan HP / tablet / laptop kecil: kartu bertumpuk, tanpa
+          scroll horizontal, lebih enak dibaca & disentuh jari. Tabel
+          baru dipakai mulai layar lebar (xl) karena di lg ada sidebar
+          yang makan tempat sehingga kolom jadi sempit. */}
+      <div className="flex flex-col gap-3 xl:hidden">
         {items.map((f) => (
-          <div key={f.id} className={`${CARD_SHELL} flex gap-3 p-4`}>
-            <Photo f={f} onPreview={setPreviewUrl} onViewLegacy={handleViewPhoto} loadingPhoto={loadingPhoto} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-[#132320]">
-                    {f.is_anonymous ? (
-                      <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
-                        Anonim
-                      </span>
-                    ) : (
-                      f.customer_name || "-"
-                    )}
-                  </p>
-                  <p className="text-xs text-[#132320]/50">
-                    {new Date(f.created_at).toLocaleString("id-ID")}
-                  </p>
-                  <ExpiryNote f={f} />
+          <div key={f.id} className={`${CARD_SHELL} p-4`}>
+            <div className="flex gap-3">
+              <Photo
+                f={f}
+                onPreview={setPreviewUrl}
+                onViewLegacy={handleViewPhoto}
+                loadingPhoto={loadingPhoto}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-[#132320]">
+                      {f.is_anonymous ? (
+                        <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
+                          Anonim
+                        </span>
+                      ) : (
+                        f.customer_name || "-"
+                      )}
+                    </p>
+                    <p className="text-xs text-[#132320]/50">
+                      {formatDate(f.created_at)}, {formatTime(f.created_at)}
+                    </p>
+                  </div>
+                  <StatusButton f={f} onToggle={handleToggleStatus} />
                 </div>
-                <StatusButton f={f} onToggle={handleToggleStatus} />
+                <p className="mt-2 break-words text-sm text-[#132320]/80">
+                  {f.complaint_text}
+                </p>
               </div>
-              <p className="mt-2 break-words text-sm text-[#132320]/80">
-                {f.complaint_text}
-              </p>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2 border-t border-black/[0.05] pt-2">
+              <ExpiryNote f={f} />
+              <DeleteButton f={f} onDelete={openDeleteDialog} labeled />
             </div>
           </div>
         ))}
       </div>
 
-      {/* Tampilan tablet/desktop: tabel, seperti sebelumnya. */}
-      <div className={`${CARD_SHELL} hidden overflow-x-auto md:block`}>
-        <Table className="table-fixed">
+      {/* Tampilan layar lebar: tabel. Lebar kolom dibuat longgar dan
+          tabel diberi lebar minimum, jadi kalau tetap kesempitan dia
+          scroll ke samping - bukan saling menimpa antar kolom. */}
+      <div className={`${CARD_SHELL} hidden overflow-hidden xl:block`}>
+        <Table className="min-w-[860px] table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-28">Tanggal</TableHead>
-              <TableHead className="w-24">Nama</TableHead>
-              <TableHead>Pesan</TableHead>
-              <TableHead className="w-16">Foto</TableHead>
-              <TableHead className="w-20">Status</TableHead>
+              <TableHead className="w-40 px-4 py-3">Tanggal</TableHead>
+              <TableHead className="w-36 px-4 py-3">Nama</TableHead>
+              <TableHead className="px-4 py-3">Pesan</TableHead>
+              <TableHead className="w-24 px-4 py-3">Foto</TableHead>
+              <TableHead className="w-32 px-4 py-3">Status</TableHead>
+              <TableHead className="w-16 px-4 py-3 text-right">
+                <span className="sr-only">Aksi</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((f) => (
               <TableRow key={f.id}>
-                <TableCell className="whitespace-nowrap align-top text-xs text-[#132320]/50">
-                  {new Date(f.created_at).toLocaleString("id-ID")}
+                <TableCell className="px-4 py-3 align-top">
+                  <p className="text-sm text-[#132320]/80">
+                    {formatDate(f.created_at)}
+                  </p>
+                  <p className="text-xs text-[#132320]/45">
+                    {formatTime(f.created_at)}
+                  </p>
                   <ExpiryNote f={f} />
                 </TableCell>
-                <TableCell className="align-top break-words">
+                <TableCell className="px-4 py-3 align-top whitespace-normal break-words">
                   {f.is_anonymous ? (
                     <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-xs text-[#132320]/60">
                       Anonim
@@ -455,14 +565,30 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
                     f.customer_name || "-"
                   )}
                 </TableCell>
-                <TableCell className="align-top whitespace-normal break-words line-clamp-3">
-                  {f.complaint_text}
+                <TableCell className="px-4 py-3 align-top whitespace-normal">
+                  {/* line-clamp TIDAK boleh dipasang di sel tabel itu
+                      sendiri (mengubah display-nya dan merusak layout
+                      tabel) - makanya dibungkus div di dalamnya. */}
+                  <div
+                    className="line-clamp-3 break-words"
+                    title={f.complaint_text}
+                  >
+                    {f.complaint_text}
+                  </div>
                 </TableCell>
-                <TableCell className="align-top">
-                  <Photo f={f} onPreview={setPreviewUrl} onViewLegacy={handleViewPhoto} loadingPhoto={loadingPhoto} />
+                <TableCell className="px-4 py-3 align-top">
+                  <Photo
+                    f={f}
+                    onPreview={setPreviewUrl}
+                    onViewLegacy={handleViewPhoto}
+                    loadingPhoto={loadingPhoto}
+                  />
                 </TableCell>
-                <TableCell className="align-top">
+                <TableCell className="px-4 py-3 align-top">
                   <StatusButton f={f} onToggle={handleToggleStatus} />
+                </TableCell>
+                <TableCell className="px-4 py-3 text-right align-top">
+                  <DeleteButton f={f} onDelete={openDeleteDialog} />
                 </TableCell>
               </TableRow>
             ))}
@@ -472,6 +598,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
 
       <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
         <DialogContent className="max-w-md">
+          <DialogTitle className="sr-only">Foto bukti keluhan</DialogTitle>
           {previewUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -482,6 +609,65 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Konfirmasi hapus - WAJIB ada karena penghapusan permanen. */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          // Jangan bisa ditutup selagi proses hapus berjalan.
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus keluhan ini?</DialogTitle>
+            <DialogDescription>
+              Keluhan
+              {deleteTarget && !deleteTarget.is_anonymous && deleteTarget.customer_name
+                ? ` dari ${deleteTarget.customer_name}`
+                : ""}{" "}
+              akan dihapus permanen
+              {deleteTarget?.photo_url || deleteTarget?.photo_path
+                ? ", termasuk foto buktinya"
+                : ""}
+              . Tindakan ini tidak bisa dibatalkan. Unduh dulu (CSV/ZIP)
+              kalau masih perlu arsipnya.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError && (
+            <p className="rounded-lg bg-[#B5585E]/10 px-3 py-2 text-sm text-[#B5585E]">
+              {deleteError}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              disabled={deleting}
+              onClick={handleConfirmDelete}
+              className="bg-[#B5585E] text-white hover:bg-[#9c4a50]"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Ya, hapus"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
-} 
+}
