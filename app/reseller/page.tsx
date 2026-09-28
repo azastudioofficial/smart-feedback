@@ -33,7 +33,7 @@ export default async function ResellerPage() {
   const { data: myProducts } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, created_at"
+      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at"
     )
     .order("created_at", { ascending: false });
 
