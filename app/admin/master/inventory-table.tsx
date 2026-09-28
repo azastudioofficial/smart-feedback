@@ -27,11 +27,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Crown,
 } from "lucide-react";
 import {
   toggleSuspend,
@@ -39,6 +41,9 @@ import {
   resetAndUnbind,
   deleteProduct,
   getInventoryPage,
+  setPlan,
+  setPlanByCodes,
+  type Plan,
 } from "./actions";
 import { QrPrintDialog } from "@/components/qr-print-dialog";
 
@@ -51,6 +56,7 @@ type Product = {
   is_active: boolean;
   is_suspended: boolean;
   pending_review?: boolean;
+  plan?: Plan;
   reseller_name?: string | null;
   created_at: string;
 };
@@ -84,18 +90,38 @@ function StatusBadge({ p }: { p: Product }) {
   );
 }
 
+// Badge paket layanan. Kartu tanpa nilai plan dianggap Pro (sama dengan
+// migrasi SQL: kartu lama otomatis Pro).
+function PlanBadge({ p }: { p: Product }) {
+  if ((p.plan ?? "pro") === "pro") {
+    return (
+      <Badge className="gap-1 bg-[#132320] hover:bg-[#132320]">
+        <Crown className="h-3 w-3" />
+        Pro
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="border-[#132320]/25 text-[#132320]/60">
+      Basic
+    </Badge>
+  );
+}
+
 export function InventoryTable({
   products,
   scanCounts,
   totalCount,
   showResellerColumn = false,
   allowDelete = true,
+  allowPlanChange = false,
 }: {
   products: Product[];
   scanCounts: Record<string, number>;
   totalCount?: number;
   showResellerColumn?: boolean;
   allowDelete?: boolean;
+  allowPlanChange?: boolean;
 }) {
   const [items, setItems] = useState(products);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -104,6 +130,13 @@ export function InventoryTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(totalCount ?? products.length);
   const [loadingPage, setLoadingPage] = useState(false);
+
+  // --- Paket Basic/Pro (khusus Super Admin) ---
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [codesOpen, setCodesOpen] = useState(false);
+  const [codesText, setCodesText] = useState("");
+  const [codesMessage, setCodesMessage] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -120,6 +153,86 @@ export function InventoryTable({
     setItems(result.data);
     setTotal(result.totalCount ?? total);
     setCurrentPage(page);
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allOnPageSelected =
+    items.length > 0 && items.every((it) => selected.has(it.id));
+
+  function toggleSelectAllOnPage() {
+    setSelected(allOnPageSelected ? new Set() : new Set(items.map((it) => it.id)));
+  }
+
+  async function applyPlan(ids: string[], plan: Plan) {
+    setBulkBusy(true);
+    const result = await setPlan(ids, plan);
+    setBulkBusy(false);
+
+    if (!result.success) {
+      alert(result.error ?? "Gagal mengubah paket.");
+      return;
+    }
+    const idSet = new Set(ids);
+    setItems((prev) =>
+      prev.map((it) => (idSet.has(it.id) ? { ...it, plan } : it))
+    );
+    setSelected(new Set());
+  }
+
+  async function handleRowPlan(p: Product) {
+    const next: Plan = (p.plan ?? "pro") === "pro" ? "basic" : "pro";
+    if (next === "basic") {
+      const ok = confirm(
+        `Turunkan "${p.business_name ?? p.short_code}" ke Basic? Pelanggan yang scan akan langsung ke Google Review dan dasbor owner terkunci. Data lama tidak dihapus.`
+      );
+      if (!ok) return;
+    }
+    setBusyId(p.id);
+    await applyPlan([p.id], next);
+    setBusyId(null);
+  }
+
+  async function handleBulkPlan(plan: Plan) {
+    const ids = Array.from(selected);
+    if (plan === "basic") {
+      const ok = confirm(
+        `Turunkan ${ids.length} kartu ke Basic? Dasbor owner-nya akan terkunci.`
+      );
+      if (!ok) return;
+    }
+    await applyPlan(ids, plan);
+  }
+
+  async function handlePlanByCodes(plan: Plan) {
+    setCodesMessage(null);
+    setBulkBusy(true);
+    const result = await setPlanByCodes(codesText, plan);
+    setBulkBusy(false);
+
+    if (!result.success) {
+      setCodesMessage(result.error ?? "Gagal.");
+      return;
+    }
+    const label = plan === "pro" ? "Pro" : "Basic";
+    const missing = result.notFound?.length
+      ? ` Kode tidak ditemukan: ${result.notFound.join(", ")}.`
+      : "";
+    setCodesMessage(`${result.updated ?? 0} kartu diubah ke ${label}.${missing}`);
+
+    // Muat ulang halaman aktif supaya badge langsung sesuai database.
+    const refreshed = await getInventoryPage(currentPage, PAGE_SIZE);
+    if (refreshed.success && refreshed.data) {
+      setItems(refreshed.data);
+    }
+    if (!result.notFound?.length) setCodesText("");
   }
 
   function handlePrintQr(p: Product) {
@@ -236,6 +349,13 @@ export function InventoryTable({
           <DropdownMenuItem onClick={() => setEditing(p)}>
             Edit Data
           </DropdownMenuItem>
+          {allowPlanChange && (
+            <DropdownMenuItem onClick={() => handleRowPlan(p)}>
+              {(p.plan ?? "pro") === "pro"
+                ? "Turunkan ke Basic"
+                : "Upgrade ke Pro"}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => handleToggleSuspend(p)}>
             {p.is_suspended ? "Unsuspend" : "Suspend"}
           </DropdownMenuItem>
@@ -264,6 +384,19 @@ export function InventoryTable({
         <h2 className="text-lg font-extrabold text-[#132320]" style={HEADING}>
           Semua Kartu ({total})
         </h2>
+        {allowPlanChange && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCodesMessage(null);
+              setCodesOpen(true);
+            }}
+            className="h-11 gap-2 border-[#132320]/15"
+          >
+            <Crown className="h-4 w-4" />
+            Ubah Paket via Kode
+          </Button>
+        )}
         {totalPages > 1 && (
           <div className="flex items-center gap-2 text-sm text-[#132320]/60">
             <button
@@ -287,6 +420,38 @@ export function InventoryTable({
         )}
       </div>
 
+      {allowPlanChange && selected.size > 0 && (
+        <div className="mx-5 mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[#0E7C86]/25 bg-[#E4F1F1] p-3">
+          <span className="mr-auto text-sm font-semibold text-[#132320]">
+            {selected.size} kartu dipilih
+          </span>
+          <Button
+            disabled={bulkBusy}
+            onClick={() => handleBulkPlan("pro")}
+            className="h-11 gap-2 bg-[#0E7C86] hover:bg-[#0B5F67]"
+          >
+            <Crown className="h-4 w-4" />
+            {bulkBusy ? "Memproses..." : "Upgrade ke Pro"}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={bulkBusy}
+            onClick={() => handleBulkPlan("basic")}
+            className="h-11 border-[#132320]/20 bg-white"
+          >
+            Turunkan ke Basic
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={bulkBusy}
+            onClick={() => setSelected(new Set())}
+            className="h-11"
+          >
+            Batal
+          </Button>
+        </div>
+      )}
+
       {/* ===== Tampilan TABEL - lg ke atas (tablet landscape & desktop).
           7-8 kolom sekaligus itu nyaman di layar lebar, tapi kepaksa
           scroll ke samping kalau dipaksa muat di HP - makanya di layar
@@ -296,8 +461,20 @@ export function InventoryTable({
         <Table>
           <TableHeader>
             <TableRow>
+              {allowPlanChange && (
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    aria-label="Pilih semua kartu di halaman ini"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAllOnPage}
+                    className="h-4 w-4 accent-[#0E7C86]"
+                  />
+                </TableHead>
+              )}
               <TableHead>ID Kartu</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Paket</TableHead>
               <TableHead>Nama Toko</TableHead>
               {showResellerColumn && <TableHead>Reseller</TableHead>}
               <TableHead>Link Review</TableHead>
@@ -309,11 +486,25 @@ export function InventoryTable({
           <TableBody>
             {items.map((p) => (
               <TableRow key={p.id}>
+                {allowPlanChange && (
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`Pilih kartu ${p.short_code}`}
+                      checked={selected.has(p.id)}
+                      onChange={() => toggleSelected(p.id)}
+                      className="h-4 w-4 accent-[#0E7C86]"
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="font-semibold" style={MONO}>
                   {p.short_code}
                 </TableCell>
                 <TableCell>
                   <StatusBadge p={p} />
+                </TableCell>
+                <TableCell>
+                  <PlanBadge p={p} />
                 </TableCell>
                 <TableCell>{p.business_name || "-"}</TableCell>
                 {showResellerColumn && (
@@ -367,7 +558,16 @@ export function InventoryTable({
         {items.map((p) => (
           <div key={p.id} className="space-y-3 p-4">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              {allowPlanChange && (
+                <input
+                  type="checkbox"
+                  aria-label={`Pilih kartu ${p.short_code}`}
+                  checked={selected.has(p.id)}
+                  onChange={() => toggleSelected(p.id)}
+                  className="mt-1 h-5 w-5 shrink-0 accent-[#0E7C86]"
+                />
+              )}
+              <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-[#132320]">
                   {p.business_name || "(Tanpa nama)"}
                 </p>
@@ -375,7 +575,10 @@ export function InventoryTable({
                   {p.short_code}
                 </p>
               </div>
-              <StatusBadge p={p} />
+              <div className="flex flex-col items-end gap-1">
+                <StatusBadge p={p} />
+                <PlanBadge p={p} />
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#132320]/55">
@@ -422,6 +625,51 @@ export function InventoryTable({
         open={!!printingCode}
         onOpenChange={(o) => !o && setPrintingCode(null)}
       />
+
+      {/* Modal: ubah paket lewat daftar kode */}
+      <Dialog open={codesOpen} onOpenChange={setCodesOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ubah Paket via Kode Kartu</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-[#132320]/60">
+              Tempel kode kartu (boleh juga link penuh /r/KODE), dipisah
+              spasi, koma, atau baris baru. Cocok untuk kartu yang tersebar
+              di banyak halaman.
+            </p>
+            <Textarea
+              value={codesText}
+              onChange={(e) => setCodesText(e.target.value)}
+              rows={6}
+              placeholder={"AKR7K2P9\nAKR3M8QX\nAKR5T1VB"}
+              className="text-base"
+              style={MONO}
+            />
+            {codesMessage && (
+              <p className="text-sm text-[#132320]">{codesMessage}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={bulkBusy || !codesText.trim()}
+                onClick={() => handlePlanByCodes("pro")}
+                className="h-11 flex-1 gap-2 bg-[#0E7C86] hover:bg-[#0B5F67]"
+              >
+                <Crown className="h-4 w-4" />
+                {bulkBusy ? "Memproses..." : "Upgrade ke Pro"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={bulkBusy || !codesText.trim()}
+                onClick={() => handlePlanByCodes("basic")}
+                className="h-11 border-[#132320]/20"
+              >
+                Turunkan ke Basic
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal edit override */}
       <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
