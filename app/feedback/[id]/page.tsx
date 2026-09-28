@@ -19,7 +19,7 @@ export default async function FeedbackPage({ params }: Props) {
 
   const { data: product, error } = await supabase
     .from("products")
-    .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, social_links, is_active, is_suspended")
+    .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, social_links, is_active, is_suspended, plan")
     .eq("id", id)
     .maybeSingle();
 
@@ -54,6 +54,15 @@ export default async function FeedbackPage({ params }: Props) {
   // sebelum toko diaktivasi (harusnya sudah kefilter di /r/[uid]).
   if (!product.is_active) {
     redirect(`/activate/${product.id}`);
+  }
+
+  // Paket Basic tidak punya halaman feedback - jaga-jaga kalau ada yang
+  // membuka /feedback/[id] langsung, arahkan ke Google Review.
+  if (product.plan !== "pro") {
+    if (product.google_review_url) {
+      redirect(product.google_review_url);
+    }
+    notFound();
   }
 
   const brandColor = product.brand_color || "#0E7C86";
