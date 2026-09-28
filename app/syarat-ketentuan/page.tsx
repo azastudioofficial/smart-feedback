@@ -8,14 +8,20 @@ import { darkenHex, lightenHex } from "@/lib/utils";
 // sama seperti app/activate/[id]/page.tsx.
 const DEFAULT_BRAND = "#0E7C86";
 
+// Tanggal ini SENGAJA ditulis tetap (bukan new Date()) - dokumen legal
+// harus menunjukkan kapan isinya terakhir benar-benar diubah, bukan
+// tanggal hari ini. Ubah manual setiap kali isi T&C diperbarui.
+const LAST_UPDATED = "28 September 2026";
+
 const SECTIONS = [
   { id: "s1", title: "Definisi Lisensi Lifetime" },
-  { id: "s2", title: "Tanggung Jawab Konten & Larangan Penyalahgunaan" },
-  { id: "s3", title: "Kebijakan Retensi & Penghapusan Data Aduan (30 Hari)" },
-  { id: "s4", title: "Penyesuaian Biaya Operasional & Opsi Pengguna" },
-  { id: "s5", title: "Batasan Tanggung Jawab Hukum" },
-  { id: "s6", title: "Perubahan Kebijakan & Penghentian Layanan" },
-  { id: "s7", title: "Kebijakan Privasi" },
+  { id: "s2", title: "Paket Layanan: Basic & Pro" },
+  { id: "s3", title: "Tanggung Jawab Konten & Larangan Penyalahgunaan (Pro)" },
+  { id: "s4", title: "Kebijakan Retensi & Penghapusan Data Aduan (Pro, 30 Hari)" },
+  { id: "s5", title: "Penyesuaian Biaya Operasional & Opsi Pengguna" },
+  { id: "s6", title: "Batasan Tanggung Jawab Hukum" },
+  { id: "s7", title: "Perubahan Kebijakan & Penghentian Layanan" },
+  { id: "s8", title: "Kebijakan Privasi" },
 ];
 
 const HEADING = { fontFamily: "var(--font-display)" };
@@ -64,11 +70,7 @@ export default function TermsPage() {
         </h1>
         <p className="mt-2 text-sm text-[#132320]/50">
           Terakhir diperbarui:{" "}
-          {new Date().toLocaleDateString("id-ID", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
+          {LAST_UPDATED}
         </p>
 
         {/* Daftar isi - bantu navigasi untuk dokumen yang cukup panjang */}
@@ -104,14 +106,54 @@ export default function TermsPage() {
             </p>
             <p>
               Lisensi ini mencakup akses ke fitur-fitur yang tersedia pada
-              versi utama produk saat pembelian dilakukan.
+              versi utama produk saat pembelian dilakukan, sesuai paket
+              layanan yang dipilih (lihat bagian 2).
             </p>
           </section>
 
           <section id="s2" className="scroll-mt-8 space-y-3">
             <SectionHeading number={2}>
-              Tanggung Jawab Konten &amp; Larangan Penyalahgunaan
+              Paket Layanan: Basic &amp; Pro
             </SectionHeading>
+            <p>
+              Layanan tersedia dalam dua paket. Setiap kartu QR/NFC berada di
+              satu paket pada satu waktu.
+            </p>
+            <ul className="list-disc space-y-1 pl-6">
+              <li>
+                <strong className="text-[#132320]">Basic:</strong> pelanggan
+                yang memindai QR/NFC langsung diarahkan ke halaman Google
+                Review toko Anda. Paket ini tidak memiliki halaman feedback,
+                form keluhan, unggah foto, maupun dasbor pemilik. Kami hanya
+                mencatat jumlah pemindaian.
+              </li>
+              <li>
+                <strong className="text-[#132320]">Pro:</strong> mencakup
+                seluruh fitur Basic ditambah halaman feedback pelanggan,
+                form keluhan (dengan foto bukti opsional), pengiriman keluhan
+                ke WhatsApp pemilik, serta akses penuh ke dasbor (rekap
+                keluhan, analytics, cetak QR, dan pengaturan toko).
+              </li>
+            </ul>
+            <p>
+              <strong className="text-[#132320]">Upgrade &amp; perubahan paket:</strong>{" "}
+              Perpindahan paket dilakukan oleh penyedia layanan. Bagian 3 dan
+              4 yang bertanda &quot;Pro&quot; otomatis berlaku sejak kartu Anda
+              berada di paket Pro, tanpa perlu persetujuan ulang. Data toko
+              yang sudah tersimpan tidak dihapus saat berpindah paket. Jika
+              kartu diturunkan ke Basic, data keluhan yang sudah ada tetap
+              mengikuti kebijakan retensi pada bagian 4.
+            </p>
+          </section>
+
+          <section id="s3" className="scroll-mt-8 space-y-3">
+            <SectionHeading number={3}>
+              Tanggung Jawab Konten &amp; Larangan Penyalahgunaan (Pro)
+            </SectionHeading>
+            <p className="text-sm italic text-[#132320]/60">
+              Bagian ini berlaku untuk paket Pro, karena hanya Pro yang
+              memungkinkan unggah foto dan teks.
+            </p>
             <p>
               <strong className="text-[#132320]">
                 Tanggung Jawab Pengguna:
@@ -135,10 +177,14 @@ export default function TermsPage() {
             </p>
           </section>
 
-          <section id="s3" className="scroll-mt-8 space-y-3">
-            <SectionHeading number={3}>
-              Kebijakan Retensi &amp; Penghapusan Data Aduan (30 Hari)
+          <section id="s4" className="scroll-mt-8 space-y-3">
+            <SectionHeading number={4}>
+              Kebijakan Retensi &amp; Penghapusan Data Aduan (Pro, 30 Hari)
             </SectionHeading>
+            <p className="text-sm italic text-[#132320]/60">
+              Bagian ini berlaku untuk paket Pro. Paket Basic tidak
+              menyimpan aduan maupun foto.
+            </p>
             <p>
               <strong className="text-[#132320]">
                 Penghapusan Otomatis:
@@ -160,8 +206,8 @@ export default function TermsPage() {
             </p>
           </section>
 
-          <section id="s4" className="scroll-mt-8 space-y-3">
-            <SectionHeading number={4}>
+          <section id="s5" className="scroll-mt-8 space-y-3">
+            <SectionHeading number={5}>
               Penyesuaian Biaya Operasional &amp; Opsi Pengguna
             </SectionHeading>
             <p>
@@ -204,8 +250,8 @@ export default function TermsPage() {
             </ul>
           </section>
 
-          <section id="s5" className="scroll-mt-8 space-y-3">
-            <SectionHeading number={5}>
+          <section id="s6" className="scroll-mt-8 space-y-3">
+            <SectionHeading number={6}>
               Batasan Tanggung Jawab Hukum
             </SectionHeading>
             <p>
@@ -220,8 +266,8 @@ export default function TermsPage() {
             </p>
           </section>
 
-          <section id="s6" className="scroll-mt-8 space-y-3">
-            <SectionHeading number={6}>
+          <section id="s7" className="scroll-mt-8 space-y-3">
+            <SectionHeading number={7}>
               Perubahan Kebijakan &amp; Penghentian Layanan
             </SectionHeading>
             <p>
@@ -237,28 +283,31 @@ export default function TermsPage() {
           </section>
 
           <section
-            id="s7"
+            id="s8"
             className="scroll-mt-8 space-y-3 border-t border-black/[0.06] pt-8"
           >
-            <SectionHeading number={7}>Kebijakan Privasi</SectionHeading>
+            <SectionHeading number={8}>Kebijakan Privasi</SectionHeading>
             <p>
               <strong className="text-[#132320]">
                 Data yang kami kumpulkan:
               </strong>{" "}
               nama toko, link Google Review, nomor WhatsApp, email login,
-              dan logo toko (kalau diunggah) untuk keperluan operasional
-              layanan. Untuk pelanggan toko Anda: nama (opsional), isi
-              keluhan, dan foto bukti (opsional) yang mereka kirimkan lewat
-              halaman feedback.
+              dan logo toko (kalau diunggah, fitur Pro) untuk keperluan
+              operasional layanan. Untuk pelanggan toko Anda: pada paket
+              Basic kami hanya mencatat jumlah pemindaian QR/NFC, tanpa data
+              pribadi pelanggan. Pada paket Pro, kami juga menyimpan nama
+              (opsional), isi keluhan, dan foto bukti (opsional) yang mereka
+              kirimkan lewat halaman feedback.
             </p>
             <p>
               <strong className="text-[#132320]">
                 Pihak ketiga yang memproses data:
               </strong>{" "}
               kami menggunakan Supabase (database &amp; autentikasi) dan
-              Cloudinary (penyimpanan foto) sebagai penyedia infrastruktur.
-              Data foto keluhan disimpan di Cloudinary dan otomatis dihapus
-              mengikuti kebijakan retensi 30 hari di atas.
+              Cloudinary (penyimpanan foto, hanya dipakai pada paket Pro)
+              sebagai penyedia infrastruktur. Data foto keluhan disimpan di
+              Cloudinary dan otomatis dihapus mengikuti kebijakan retensi 30
+              hari di atas.
             </p>
             <p>
               <strong className="text-[#132320]">Akses data:</strong> data
