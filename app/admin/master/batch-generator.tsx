@@ -20,7 +20,7 @@ import {
   triggerBlobDownload,
   type QrDesign,
 } from "@/lib/qr-design";
-import { generateProducts, listResellers } from "./actions";
+import { generateProducts, listResellers, type Plan } from "./actions";
 
 type GeneratedItem = { id: string; short_code: string };
 type Reseller = { id: string; name: string; card_count: number };
@@ -37,6 +37,7 @@ export function BatchGenerator() {
   const [format, setFormat] = useState<"png" | "svg">("png");
   const [design, setDesign] = useState<QrDesign>(DEFAULT_QR_DESIGN);
   const [resellerId, setResellerId] = useState<string>("");
+  const [plan, setPlan] = useState<Plan>("basic");
   const [resellers, setResellers] = useState<Reseller[]>([]);
 
   const [loading, setLoading] = useState(false);
@@ -95,7 +96,12 @@ export function BatchGenerator() {
     setError(null);
     setLoading(true);
 
-    const result = await generateProducts(qty, prefix, resellerId || null);
+    const result = await generateProducts(
+      qty,
+      prefix,
+      resellerId || null,
+      plan
+    );
 
     if (!result.success || !result.data) {
       setLoading(false);
@@ -117,7 +123,7 @@ export function BatchGenerator() {
         Kode dibuat otomatis, QR langsung terunduh untuk dicetak ke akrilik.
       </p>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-5">
         <div className="space-y-1">
           <Label>Jumlah Kartu</Label>
           <Input
@@ -148,6 +154,17 @@ export function BatchGenerator() {
           >
             <option value="png">PNG (1000px)</option>
             <option value="svg">SVG (Vektor)</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <Label>Paket Layanan</Label>
+          <select
+            value={plan}
+            onChange={(e) => setPlan(e.target.value as Plan)}
+            className={selectClass}
+          >
+            <option value="basic">Basic (langsung ke Google Review)</option>
+            <option value="pro">Pro (dasbor lengkap)</option>
           </select>
         </div>
         <div className="space-y-1">
