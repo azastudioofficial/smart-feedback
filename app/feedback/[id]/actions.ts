@@ -27,7 +27,7 @@ export async function submitFeedback(
   // Ambil data toko langsung dari server (jangan percaya data dari client)
   const { data: product, error: productError } = await service
     .from("products")
-    .select("business_name, owner_whatsapp, is_active, is_suspended")
+    .select("business_name, owner_whatsapp, is_active, is_suspended, plan")
     .eq("id", input.productId)
     .maybeSingle();
 
@@ -36,6 +36,11 @@ export async function submitFeedback(
   }
 
   if (!product.is_active || product.is_suspended) {
+    return { success: false, error: "Layanan ini sedang tidak aktif." };
+  }
+
+  // Form keluhan hanya untuk paket Pro (dicek di server, bukan cuma di UI).
+  if (product.plan !== "pro") {
     return { success: false, error: "Layanan ini sedang tidak aktif." };
   }
 
