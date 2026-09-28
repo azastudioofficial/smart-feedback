@@ -32,6 +32,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cloudinaryThumbnail } from "@/lib/utils";
+import { buildFeedbackXlsx } from "@/lib/export-feedback";
+import { useStore } from "./store-context";
 import { updateFeedbackStatus, deleteFeedback } from "./actions";
 
 type Feedback = {
@@ -60,63 +62,6 @@ function daysUntilDeleted(createdAt: string): number {
   const ageMs = Date.now() - new Date(createdAt).getTime();
   const ageDays = ageMs / (24 * 60 * 60 * 1000);
   return Math.max(0, Math.ceil(RETENTION_DAYS - ageDays));
-}
-
-// Susun isi CSV (tanpa BOM) - dipakai baik untuk download CSV polos
-// maupun buat ditaruh di dalam ZIP bareng foto-fotonya.
-//
-// Rapi di Excel: pemisah ";" (standar Excel Indonesia) + baris "sep=;"
-// supaya kolom terpisah benar di Excel apa pun pengaturan bahasanya.
-// (Kalau dibuka di Google Sheets, hapus saja baris pertama itu.)
-//
-// Aman: teks dari pelanggan yang diawali = + - @ diberi tanda ' di
-// depan supaya Excel tidak menjalankannya sebagai rumus.
-function csvText(value: string | null | undefined): string {
-  const oneLine = (value ?? "").replace(/\s*[\r\n]+\s*/g, " ").trim();
-  return /^[=+\-@\t]/.test(oneLine) ? `'${oneLine}` : oneLine;
-}
-
-// Format yyyy-mm-dd hh:mm (jam lokal) - dikenali Excel sebagai tanggal
-// sungguhan, jadi bisa diurutkan & difilter.
-function csvDate(iso: string): string {
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(
-    d.getHours()
-  )}:${p(d.getMinutes())}`;
-}
-
-// photoFiles (opsional, mode ZIP): id keluhan -> nama file di folder foto/,
-// supaya tiap baris bisa dicocokkan dengan file fotonya.
-function buildCsvContent(
-  items: Feedback[],
-  photoFiles?: Map<string, string>
-): string {
-  const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
-  const header = ["No", "Tanggal", "Nama", "Pesan", "Status", "Link Foto"];
-  if (photoFiles) header.push("File Foto (di ZIP)");
-
-  const rows = items.map((f, i) => {
-    const row = [
-      String(i + 1),
-      csvDate(f.created_at),
-      f.is_anonymous ? "Anonim" : csvText(f.customer_name) || "-",
-      csvText(f.complaint_text),
-      f.status,
-      csvText(f.photo_url),
-    ];
-    if (photoFiles) {
-      const file = photoFiles.get(f.id);
-      row.push(file ? `foto/${file}` : "");
-    }
-    return row;
-  });
-
-  return (
-    "sep=;\r\n" +
-    [header, ...rows].map((row) => row.map(cell).join(";")).join("\r\n")
-  );
 }
 
 // Komponen kecil di bawah ini SENGAJA ditaruh di luar FeedbackTable.
@@ -251,6 +196,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
   const router = useRouter();
+  const { businessName } = useStore();
   const [downloadingZip, setDownloadingZip] = useState(false);
   // Keluhan yang sedang menunggu konfirmasi hapus.
   const [deleteTarget, setDeleteTarget] = useState<Feedback | null>(null);
@@ -340,24 +286,22 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
   // satu-satunya cara owner simpan datanya kalau perlu arsip lebih lama.
   // CATATAN: ini cuma nyimpen LINK fotonya, bukan fotonya sendiri -
   // begitu foto aslinya kehapus dari Cloudinary (bareng cleanup 30
-  // hari), link ini ikut mati walau file CSV-nya sudah kamu simpan.
-  // Kalau mau fotonya beneran awet, pakai "Download CSV + Foto (ZIP)".
-  function handleDownloadCsv() {
-    const csvContent = buildCsvContent(items);
-
-    // Tambah BOM (\uFEFF) di depan supaya Excel baca karakter
-    // Indonesia (é, spasi non-standar, dll) dengan benar, bukan
-    // jadi karakter aneh.
-    const blob = new Blob(["\uFEFF" + csvContent], {
-      type: "text/csv;charset=utf-8",
-    });
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    saveAs(blob, `rekap-keluhan-${todayStr}.csv`);
+  // hari), link ini ikut mati walau file Excel-nya sudah kamu simpan.
+  // Kalau mau fotonya beneran awet, pakai "Excel + Foto (ZIP)".
+  async function handleDownloadExcel() {
+    try {
+      const blob = await buildFeedbackXlsx(items, businessName);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      saveAs(blob, `rekap-keluhan-${todayStr}.xlsx`);
+    } catch {
+      alert("Gagal membuat file Excel. Coba lagi sebentar lagi.");
+    }
   }
 
-  // Versi lengkap: CSV + file foto ASLI dibungkus 1 ZIP, supaya tetap
-  // ada walau file di Cloudinary sudah dihapus cron cleanup.
+  // Versi lengkap: Excel + file foto ASLI dibungkus 1 ZIP, supaya tetap
+  // ada walau file di Cloudinary sudah dihapus cron cleanup. Tombol
+  // "Lihat foto" di Excel menaut ke file di folder foto/ (bukan ke
+  // Cloudinary), jadi tetap bisa dibuka setelah ZIP di-extract.
   async function handleDownloadZip() {
     setDownloadingZip(true);
     const withPhoto = items.filter((f) => f.photo_url);
@@ -372,21 +316,21 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
       const zip = new JSZip();
       const photoFolder = zip.folder("foto");
 
-      // Nama file foto ditentukan DI AWAL supaya kolom "File Foto" di
-      // CSV bisa mencocokkan tiap keluhan dengan file fotonya.
+      // Nama file foto ditentukan DI AWAL, supaya Excel bisa menautkan
+      // tiap baris keluhan ke file fotonya.
       const photoNames = new Map<string, string>();
       withPhoto.forEach((f, i) => {
-        // Ambil ekstensi dari URL aslinya kalau ada, fallback .jpg.
         const match = (f.photo_url as string).match(/\.(\w{3,4})(?:\?|$)/);
         const ext = match ? match[1] : "jpg";
         const dateStr = new Date(f.created_at).toISOString().slice(0, 10);
-        const namePart = (f.customer_name || "anonim")
+        const namePart = (f.is_anonymous ? "anonim" : f.customer_name || "anonim")
           .replace(/[^a-zA-Z0-9]+/g, "-")
           .slice(0, 30);
         photoNames.set(f.id, `${dateStr}_${namePart}_${i + 1}.${ext}`);
       });
 
-      // Hanya foto yang BERHASIL diunduh yang dicatat di CSV.
+      // Foto yang berhasil diunduh dicatat, supaya keluhan yang fotonya
+      // gagal diambil tidak menaut ke file yang tidak ada.
       const okPhotos = new Map<string, string>();
 
       await Promise.allSettled(
@@ -409,10 +353,8 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
         })
       );
 
-      zip.file(
-        "rekap-keluhan.csv",
-        "\uFEFF" + buildCsvContent(items, okPhotos)
-      );
+      const xlsxBlob = await buildFeedbackXlsx(items, businessName, okPhotos);
+      zip.file("rekap-keluhan.xlsx", xlsxBlob);
 
       setZipProgress((p) => (p ? { ...p, phase: "zip" } : p));
       const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -458,18 +400,18 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
         <div className="flex shrink-0 gap-2">
           <button
             type="button"
-            onClick={handleDownloadCsv}
+            onClick={handleDownloadExcel}
             title="Cuma data teks + link foto (link ikut mati setelah 30 hari)"
             className="flex h-9 items-center gap-1.5 rounded-lg border border-black/[0.1] bg-white px-3 text-xs font-medium text-[#132320] transition hover:bg-black/[0.03]"
           >
             <Download className="h-3.5 w-3.5" />
-            CSV saja
+            Excel saja
           </button>
           <button
             type="button"
             onClick={handleDownloadZip}
             disabled={downloadingZip}
-            title="CSV + file foto asli, aman walau Cloudinary sudah dibersihkan"
+            title="Excel + file foto asli, aman walau Cloudinary sudah dibersihkan"
             className="flex h-9 items-center gap-1.5 rounded-lg bg-[#132320] px-3 text-xs font-medium text-white transition hover:bg-[#0B1512] disabled:opacity-60"
           >
             {downloadingZip ? (
@@ -477,7 +419,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
             ) : (
               <FolderDown className="h-3.5 w-3.5" />
             )}
-            {downloadingZip ? "Sedang diproses..." : "CSV + Foto (ZIP)"}
+            {downloadingZip ? "Sedang diproses..." : "Excel + Foto (ZIP)"}
           </button>
         </div>
       </div>
@@ -672,7 +614,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
               {deleteTarget?.photo_url || deleteTarget?.photo_path
                 ? ", termasuk foto buktinya"
                 : ""}
-              . Tindakan ini tidak bisa dibatalkan. Unduh dulu (CSV/ZIP)
+              . Tindakan ini tidak bisa dibatalkan. Unduh dulu (Excel/ZIP)
               kalau masih perlu arsipnya.
             </DialogDescription>
           </DialogHeader>
