@@ -6,6 +6,7 @@ import { StoreProvider } from "./store-context";
 import { OwnerDashboardShell } from "./owner-dashboard-shell";
 import { logout } from "./actions";
 import { Button } from "@/components/ui/button";
+import { Lock } from "lucide-react";
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
   const { data: products } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, logo_url, cover_image_url, cover_position, brand_color, social_links"
+      "id, short_code, business_name, google_review_url, owner_whatsapp, logo_url, cover_image_url, cover_position, brand_color, social_links, plan"
     )
     .eq("owner_id", user.id)
     .order("created_at", { ascending: true });
@@ -44,6 +45,35 @@ export default async function DashboardPage() {
             Belum ada toko yang terhubung ke akun ini.
           </p>
           <form action={logout} className="mt-4">
+            <Button type="submit" variant="outline">
+              Logout
+            </Button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // Paket Basic: dasbor lengkap terkunci. Owner tetap bisa login dan
+  // melihat statusnya, tapi fitur keluhan/analytics/QR/pengaturan hanya
+  // untuk Pro. Upgrade dilakukan admin lewat /admin/master.
+  if (products[0].plan !== "pro") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#F6F8F7] px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-black/[0.06] bg-white p-7 text-center shadow-sm">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E4F1F1] text-[#0E7C86]">
+            <Lock className="h-6 w-6" />
+          </span>
+          <h1 className="mt-4 text-xl font-bold text-[#132320]">
+            Dasbor khusus paket Pro
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-[#132320]/60">
+            {products[0].business_name ?? "Toko Anda"} saat ini memakai paket
+            Basic: pelanggan yang scan langsung diarahkan ke Google Review.
+            Upgrade ke Pro untuk membuka rekap keluhan, analytics, cetak QR,
+            dan pengaturan toko. Hubungi penyedia layanan untuk upgrade.
+          </p>
+          <form action={logout} className="mt-5">
             <Button type="submit" variant="outline">
               Logout
             </Button>
