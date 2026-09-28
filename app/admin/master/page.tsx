@@ -32,7 +32,7 @@ export default async function AdminMasterPage() {
       supabase
         .from("products")
         .select(
-          "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, created_at, resellers(name)",
+          "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, resellers(name)",
           { count: "exact" }
         )
         .order("created_at", { ascending: false })
@@ -95,6 +95,7 @@ export default async function AdminMasterPage() {
           totalCount={totalCount ?? inventoryItems.length}
           showResellerColumn
           allowDelete
+          allowPlanChange
         />
       ),
     },
