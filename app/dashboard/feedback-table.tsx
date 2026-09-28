@@ -2,7 +2,7 @@
 // app/dashboard/feedback-table.tsx
 
 import { useState } from "react";
-import { Inbox, Download, FolderDown, Loader2 } from "lucide-react";
+import { Inbox, Download, FolderDown, Loader2, Clock } from "lucide-react";
 import { saveAs } from "file-saver";
 import {
   Table,
@@ -34,6 +34,18 @@ type Feedback = {
 const CARD_SHELL =
   "rounded-2xl border border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(19,35,32,0.03),0_20px_45px_-25px_rgba(19,35,32,0.25)] backdrop-blur-xl";
 
+// HARUS sama dengan RETENTION_DAYS di app/api/cron/cleanup/route.ts -
+// kalau salah satu diubah, ubah yang lain juga supaya keterangan di
+// halaman ini tidak menyesatkan owner.
+const RETENTION_DAYS = 30;
+
+// Sisa hari sebelum keluhan ini kena hapus otomatis oleh cron cleanup.
+function daysUntilDeleted(createdAt: string): number {
+  const ageMs = Date.now() - new Date(createdAt).getTime();
+  const ageDays = ageMs / (24 * 60 * 60 * 1000);
+  return Math.max(0, Math.ceil(RETENTION_DAYS - ageDays));
+}
+
 // Susun isi CSV (tanpa BOM) - dipakai baik untuk download CSV polos
 // maupun buat ditaruh di dalam ZIP bareng foto-fotonya.
 function buildCsvContent(items: Feedback[]): string {
@@ -51,6 +63,92 @@ function buildCsvContent(items: Feedback[]): string {
   ]);
 
   return [header, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+}
+
+// Komponen kecil di bawah ini SENGAJA ditaruh di luar FeedbackTable.
+// Kalau dideklarasikan di dalamnya, React menganggap tiap render itu
+// komponen "baru" dan membongkar-pasang ulang seluruh baris (termasuk
+// gambar) setiap ada state berubah - termasuk tiap kali progres ZIP
+// bertambah. Di luar, React cukup memperbarui yang berubah saja.
+
+function Photo({
+  f,
+  onPreview,
+  onViewLegacy,
+  loadingPhoto,
+}: {
+  f: Feedback;
+  onPreview: (url: string) => void;
+  onViewLegacy: (f: Feedback) => void;
+  loadingPhoto: boolean;
+}) {
+  if (f.photo_url) {
+    const url = f.photo_url;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={cloudinaryThumbnail(url)}
+        alt="Foto bukti keluhan"
+        loading="lazy"
+        onClick={() => onPreview(url)}
+        className="h-14 w-14 shrink-0 cursor-pointer rounded-md border border-black/[0.08] object-cover transition hover:opacity-80"
+      />
+    );
+  }
+  if (f.photo_path) {
+    return (
+      <button
+        onClick={() => onViewLegacy(f)}
+        disabled={loadingPhoto}
+        className="shrink-0 text-sm text-[var(--brand)] underline underline-offset-2"
+      >
+        Lihat
+      </button>
+    );
+  }
+  return <span className="text-xs text-[#132320]/40">-</span>;
+}
+
+// Hitung mundur per keluhan - merah kalau tinggal seminggu atau
+// kurang, biar owner sadar mana yang perlu segera diunduh.
+function ExpiryNote({ f }: { f: Feedback }) {
+  const days = daysUntilDeleted(f.created_at);
+  const soon = days <= 7;
+  return (
+    <p
+      className={`mt-0.5 flex items-center gap-1 text-[11px] ${
+        soon ? "font-medium text-[#B5585E]" : "text-[#132320]/40"
+      }`}
+    >
+      <Clock className="h-3 w-3 shrink-0" />
+      {days <= 0 ? "Segera dihapus" : `Dihapus ${days} hari lagi`}
+    </p>
+  );
+}
+
+function StatusButton({
+  f,
+  onToggle,
+}: {
+  f: Feedback;
+  onToggle: (id: string, current: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onToggle(f.id, f.status)}
+      className="flex min-h-11 items-center py-2"
+    >
+      <Badge
+        className={
+          f.status === "Resolved"
+            ? "bg-[var(--brand)] hover:bg-[var(--brand-dark)]"
+            : "bg-[#B5585E] hover:bg-[#9c4a50]"
+        }
+      >
+        {f.status}
+      </Badge>
+    </button>
+  );
 }
 
 export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
@@ -206,63 +304,28 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
           <Inbox className="h-5 w-5" />
         </span>
         <p className="text-sm text-[#132320]/50">Belum ada keluhan masuk.</p>
+        <p className="text-xs text-[#132320]/35">
+          Keluhan yang masuk akan otomatis dihapus setelah {RETENTION_DAYS} hari.
+        </p>
       </div>
-    );
-  }
-
-  function Photo({ f }: { f: Feedback }) {
-    if (f.photo_url) {
-      return (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={cloudinaryThumbnail(f.photo_url)}
-          alt="Foto bukti keluhan"
-          loading="lazy"
-          onClick={() => setPreviewUrl(f.photo_url)}
-          className="h-14 w-14 shrink-0 cursor-pointer rounded-md border border-black/[0.08] object-cover transition hover:opacity-80"
-        />
-      );
-    }
-    if (f.photo_path) {
-      return (
-        <button
-          onClick={() => handleViewPhoto(f)}
-          disabled={loadingPhoto}
-          className="shrink-0 text-sm text-[var(--brand)] underline underline-offset-2"
-        >
-          Lihat
-        </button>
-      );
-    }
-    return <span className="text-xs text-[#132320]/40">-</span>;
-  }
-
-  function StatusButton({ f }: { f: Feedback }) {
-    return (
-      <button
-        onClick={() => handleToggleStatus(f.id, f.status)}
-        className="flex min-h-11 items-center py-2"
-      >
-        <Badge
-          className={
-            f.status === "Resolved"
-              ? "bg-[var(--brand)] hover:bg-[var(--brand-dark)]"
-              : "bg-[#B5585E] hover:bg-[#9c4a50]"
-          }
-        >
-          {f.status}
-        </Badge>
-      </button>
     );
   }
 
   return (
     <>
-      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-[#132320]/40">
-          Keluhan otomatis terhapus setelah 30 hari (termasuk fotonya) -
-          unduh dulu kalau mau simpan lebih lama.
+      <div
+        role="note"
+        className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900/80"
+      >
+        <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <p>
+          Keluhan <b>otomatis dihapus {RETENTION_DAYS} hari</b> setelah
+          masuk, termasuk foto buktinya. Unduh dulu kalau mau disimpan
+          lebih lama.
         </p>
+      </div>
+
+      <div className="mb-3 flex justify-end">
         <div className="flex shrink-0 gap-2">
           <button
             type="button"
@@ -336,7 +399,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
       <div className="flex flex-col gap-3 md:hidden">
         {items.map((f) => (
           <div key={f.id} className={`${CARD_SHELL} flex gap-3 p-4`}>
-            <Photo f={f} />
+            <Photo f={f} onPreview={setPreviewUrl} onViewLegacy={handleViewPhoto} loadingPhoto={loadingPhoto} />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -352,8 +415,9 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
                   <p className="text-xs text-[#132320]/50">
                     {new Date(f.created_at).toLocaleString("id-ID")}
                   </p>
+                  <ExpiryNote f={f} />
                 </div>
-                <StatusButton f={f} />
+                <StatusButton f={f} onToggle={handleToggleStatus} />
               </div>
               <p className="mt-2 break-words text-sm text-[#132320]/80">
                 {f.complaint_text}
@@ -380,6 +444,7 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
               <TableRow key={f.id}>
                 <TableCell className="whitespace-nowrap align-top text-xs text-[#132320]/50">
                   {new Date(f.created_at).toLocaleString("id-ID")}
+                  <ExpiryNote f={f} />
                 </TableCell>
                 <TableCell className="align-top break-words">
                   {f.is_anonymous ? (
@@ -394,10 +459,10 @@ export function FeedbackTable({ feedbacks }: { feedbacks: Feedback[] }) {
                   {f.complaint_text}
                 </TableCell>
                 <TableCell className="align-top">
-                  <Photo f={f} />
+                  <Photo f={f} onPreview={setPreviewUrl} onViewLegacy={handleViewPhoto} loadingPhoto={loadingPhoto} />
                 </TableCell>
                 <TableCell className="align-top">
-                  <StatusButton f={f} />
+                  <StatusButton f={f} onToggle={handleToggleStatus} />
                 </TableCell>
               </TableRow>
             ))}
