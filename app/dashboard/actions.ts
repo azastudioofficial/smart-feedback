@@ -2,7 +2,7 @@
 // app/dashboard/actions.ts
 
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
 import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
 
@@ -215,6 +215,108 @@ export async function updateFeedbackStatus(
   if (error) {
     console.error("Gagal update status feedback:", error.message);
     return { success: false, error: "Gagal mengubah status." };
+  }
+
+  return { success: true };
+}
+
+/**
+ * Hapus foto dari Cloudinary dan KEMBALIKAN hasilnya (true = beres).
+ * Beda dengan deleteCloudinaryImage di atas yang best-effort dan diam
+ * saja kalau gagal: untuk hapus manual keluhan kita perlu tahu hasilnya,
+ * karena kalau baris database sudah terhapus tapi fotonya masih ada di
+ * Cloudinary, foto itu jadi yatim dan tidak akan pernah dibersihkan cron
+ * (cron mencarinya lewat baris database yang sudah tidak ada).
+ * "not_found" dianggap beres - artinya fotonya memang sudah tidak ada.
+ */
+async function deleteCloudinaryImageStrict(publicId: string): Promise<boolean> {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) return false;
+
+  try {
+    const auth = btoa(`${apiKey}:${apiSecret}`);
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload?public_ids[]=${encodeURIComponent(
+        publicId
+      )}`,
+      { method: "DELETE", headers: { Authorization: `Basic ${auth}` } }
+    );
+    if (!res.ok) return false;
+    const result = await res.json();
+    const state = result?.deleted?.[publicId];
+    return state === "deleted" || state === "not_found";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hapus 1 keluhan secara manual oleh owner: foto di Cloudinary (atau
+ * Storage untuk data lama) DAN barisnya di database. Link foto pendek
+ * (/p/kode) ikut mati otomatis karena kodenya tersimpan di baris yang
+ * sama.
+ *
+ * Kepemilikan dicek lewat client yang ikut sesi login - RLS hanya
+ * mengizinkan owner melihat keluhan tokonya sendiri, jadi keluhan
+ * milik toko lain akan tampil "tidak ditemukan". Baru setelah itu
+ * penghapusan dilakukan lewat service client, karena tabel feedbacks
+ * memang tidak punya policy DELETE untuk owner.
+ */
+export async function deleteFeedback(feedbackId: string): Promise<ActionResult> {
+  const supabase = await createServerSupabase();
+
+  const { data: feedback, error: findError } = await supabase
+    .from("feedbacks")
+    .select("id, photo_url, photo_path")
+    .eq("id", feedbackId)
+    .maybeSingle();
+
+  if (findError || !feedback) {
+    return { success: false, error: "Keluhan tidak ditemukan atau sudah dihapus." };
+  }
+
+  const service = createServiceClient();
+
+  // 1. Foto di Cloudinary dulu. Kalau gagal, batalkan - jangan sampai
+  //    baris terhapus tapi fotonya tertinggal.
+  if (feedback.photo_url) {
+    const publicId = feedback.photo_url.includes("res.cloudinary.com")
+      ? extractCloudinaryPublicId(feedback.photo_url)
+      : null;
+    if (publicId) {
+      const ok = await deleteCloudinaryImageStrict(publicId);
+      if (!ok) {
+        return {
+          success: false,
+          error: "Gagal menghapus foto dari Cloudinary. Coba lagi sebentar lagi.",
+        };
+      }
+    }
+  }
+
+  // 2. Foto lama di Supabase Storage (sebelum pindah ke Cloudinary).
+  if (feedback.photo_path) {
+    const { error: storageError } = await service.storage
+      .from("complaint-photos")
+      .remove([feedback.photo_path]);
+    if (storageError) {
+      console.error("Gagal hapus foto lama dari Storage:", storageError.message);
+      return { success: false, error: "Gagal menghapus foto lama. Coba lagi." };
+    }
+  }
+
+  // 3. Terakhir baris databasenya.
+  const { data: deleted, error: deleteError } = await service
+    .from("feedbacks")
+    .delete()
+    .eq("id", feedbackId)
+    .select("id");
+
+  if (deleteError || !deleted || deleted.length === 0) {
+    console.error("Gagal hapus keluhan:", deleteError?.message);
+    return { success: false, error: "Gagal menghapus keluhan dari database." };
   }
 
   return { success: true };
