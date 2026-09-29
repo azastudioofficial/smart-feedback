@@ -63,11 +63,96 @@ type Product = {
   plan?: Plan;
   reseller_name?: string | null;
   created_at: string;
+  last_scanned_at?: string | null;
 };
 
 const MONO = { fontFamily: "var(--font-mono-ticket)" };
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
 const PAGE_SIZE = 25;
+
+
+// null di render pertama (server & klien sama-sama render tanpa waktu
+// relatif -> tidak ada hydration mismatch), baru terisi setelah mount
+// dan disegarkan tiap menit.
+function useNow() {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+function relativeTime(iso: string, now: number) {
+  const diff = Math.max(0, now - new Date(iso).getTime());
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "Baru saja";
+  if (min < 60) return `${min} menit lalu`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} jam lalu`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day} hari lalu`;
+  const mon = Math.floor(day / 30);
+  if (mon < 12) return `${mon} bulan lalu`;
+  return `${Math.floor(day / 365)} tahun lalu`;
+}
+
+function formatAbsolute(iso: string) {
+  return new Date(iso).toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function LastScan({
+  iso,
+  compact = false,
+}: {
+  iso?: string | null;
+  compact?: boolean;
+}) {
+  const now = useNow();
+  if (!iso) {
+    return <span className="text-[#132320]/40">Belum pernah</span>;
+  }
+  const rel = now != null ? relativeTime(iso, now) : null;
+  if (compact) {
+    return (
+      <span title={formatAbsolute(iso)} suppressHydrationWarning>
+        {rel ?? formatAbsolute(iso)}
+      </span>
+    );
+  }
+  return (
+    <div title={formatAbsolute(iso)} suppressHydrationWarning>
+      <p className="text-sm text-[#132320]">{rel ?? "\u00A0"}</p>
+      <p className="text-[11px] text-[#132320]/40">{formatAbsolute(iso)}</p>
+    </div>
+  );
+}
+
+// Link ke halaman kartu seperti yang dilihat pelanggan. ?preview=1 =
+// dibuka tanpa dihitung sebagai scan (lihat app/r/[uid]/page.tsx).
+function CardUrlLink({ code, className }: { code: string; className?: string }) {
+  return (
+    <a
+      href={`/r/${code}?preview=1`}
+      target="_blank"
+      rel="noreferrer"
+      title="Buka halaman kartu (tidak dihitung sebagai scan)"
+      className={`inline-flex items-center gap-1 text-[#0E7C86] underline-offset-2 hover:underline ${className ?? ""}`}
+    >
+      /r/{code}
+      <ExternalLink className="h-3 w-3 shrink-0" />
+    </a>
+  );
+}
 
 // Dipakai bersama oleh tampilan tabel (desktop) DAN kartu (mobile) -
 // biar logika status kartu nggak bisa "kesimpangan" antara 2 tampilan.
@@ -112,7 +197,7 @@ function PlanBadge({ p }: { p: Product }) {
 
 export function InventoryTable({
   products,
-  scanCounts,
+  scanCounts: initialScanCounts,
   totalCount,
   showResellerColumn = false,
   allowDelete = true,
@@ -126,6 +211,8 @@ export function InventoryTable({
   allowPlanChange?: boolean;
 }) {
   const [items, setItems] = useState(products);
+  // Salinan lokal supaya angka Scan bisa langsung jadi 0 setelah Reset.
+  const [scanCounts, setScanCounts] = useState(initialScanCounts);
   const [editing, setEditing] = useState<Product | null>(null);
   const [printingCode, setPrintingCode] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -314,7 +401,7 @@ export function InventoryTable({
     const confirmed = confirm(
       `Kosongkan data toko "${
         p.business_name ?? p.short_code
-      }"? Akrilik ini akan bisa dijual ke klien baru.`
+      }"? Akrilik ini akan bisa dijual ke klien baru. Riwayat scan kartu ini juga ikut direset ke 0.`
     );
     if (!confirmed) return;
 
@@ -327,11 +414,13 @@ export function InventoryTable({
       return;
     }
 
+    setScanCounts((prev) => ({ ...prev, [p.id]: 0 }));
     setItems((prev) =>
       prev.map((it) =>
         it.id === p.id
           ? {
               ...it,
+              last_scanned_at: null,
               business_name: null,
               google_review_url: null,
               owner_whatsapp: null,
@@ -595,6 +684,7 @@ export function InventoryTable({
               {showResellerColumn && <TableHead>Reseller</TableHead>}
               <TableHead>Link Review</TableHead>
               <TableHead>Scan</TableHead>
+              <TableHead>Scan Terakhir</TableHead>
               <TableHead>URL Kartu</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
@@ -643,8 +733,11 @@ export function InventoryTable({
                   )}
                 </TableCell>
                 <TableCell style={MONO}>{scanCounts[p.id] ?? 0}</TableCell>
-                <TableCell className="max-w-[180px] truncate text-xs text-[#132320]/50">
-                  /r/{p.short_code}
+                <TableCell className="whitespace-nowrap">
+                  <LastScan iso={p.last_scanned_at} />
+                </TableCell>
+                <TableCell className="max-w-[180px] truncate text-xs">
+                  <CardUrlLink code={p.short_code} />
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -704,10 +797,15 @@ export function InventoryTable({
                   {scanCounts[p.id] ?? 0}
                 </strong>
               </span>
+              <span>
+                Scan terakhir: <LastScan iso={p.last_scanned_at} compact />
+              </span>
               {showResellerColumn && (
                 <span>Reseller: {p.reseller_name || "-"}</span>
               )}
             </div>
+
+            <CardUrlLink code={p.short_code} className="text-xs" />
 
             {p.google_review_url && (
               <a
