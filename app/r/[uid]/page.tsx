@@ -7,14 +7,20 @@ import { createServiceClient } from "@/lib/supabase/server";
 
 type Props = {
   params: Promise<{ uid: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 // Regex sederhana untuk deteksi apakah "uid" itu UUID atau short_code
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function ScanRoutePage({ params }: Props) {
+export default async function ScanRoutePage({ params, searchParams }: Props) {
   const { uid } = await params;
+  // ?preview=1 dipakai link "URL Kartu" di tabel admin/reseller: membuka
+  // halaman seperti pelanggan, tapi TIDAK dihitung sebagai scan, supaya
+  // angka Scan & "Scan Terakhir" tidak tercemar klik pengecekan.
+  const { preview } = await searchParams;
+  const isPreview = preview === "1";
 
   // createServiceClient dipakai karena pelanggan belum login sama sekali
   // saat scan QR — kita butuh baca data produk lintas-owner.
@@ -62,9 +68,11 @@ export default async function ScanRoutePage({ params }: Props) {
 
   // 3. Aktif -> catat scan (fire-and-forget, tidak menunda redirect kalau gagal)
   //    dan lanjut ke halaman feedback pelanggan.
-  await supabase.from("scan_logs").insert({
-    product_id: product.id,
-  });
+  if (!isPreview) {
+    await supabase.from("scan_logs").insert({
+      product_id: product.id,
+    });
+  }
   // Catatan: ip_hash/user_agent bisa ditambahkan di sini kalau nanti
   // mau anti-spam analytics (lihat saran sebelumnya) — dilewat dulu
   // supaya halaman ini tetap sederhana untuk MVP.
