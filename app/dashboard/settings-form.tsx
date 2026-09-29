@@ -673,8 +673,8 @@ export function SettingsForm({
         <div>
           <Label>Warna Tema</Label>
           <p className="mt-1 text-xs text-[#132320]/45">
-            Dipakai untuk warna aksen di dashboard kamu dan tombol &quot;Puas
-            / Bagus&quot; di halaman feedback pelanggan.
+            Dipakai untuk warna aksen di dashboard kamu dan tombol &quot;Tulis
+            Review di Google Maps&quot; di halaman feedback pelanggan.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {COLOR_PRESETS.map((preset) => (
