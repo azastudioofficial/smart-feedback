@@ -116,8 +116,9 @@ export async function submitFeedback(
 }
 
 /**
- * Dipanggil saat pelanggan klik tombol "Puas / Bagus", sebelum
- * redirect ke Google Review. Dipakai untuk hitung rasio di Analytics.
+ * Dipanggil saat pelanggan klik tombol "Tulis Review di Google Maps",
+ * sebelum redirect ke Google Review. Dipakai untuk hitung klik review
+ * dan konversinya di Analytics.
  */
 export async function logPositiveClick(productId: string): Promise<void> {
   const service = createServiceClient();
