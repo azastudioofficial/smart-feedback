@@ -1,8 +1,8 @@
 // app/activate/[id]/page.tsx
 
 import type { CSSProperties } from "react";
-import { notFound } from "next/navigation";
-import { Ban, CheckCircle2, Clock3 } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { Ban, Clock3 } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/server";
 import { darkenHex, lightenHex } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -83,15 +83,12 @@ export default async function ActivatePage({ params }: Props) {
     );
   }
 
+  // Sudah aktif (mis. baru disetujui admin lalu halaman ini dibuka/di-refresh
+  // lagi) -> jangan berhenti di layar "Sudah Diaktivasi". Lempar ke pintu
+  // masuk scan (/r/...) yang sudah menangani semuanya: catat scan, lalu
+  // Pro -> halaman feedback, Basic -> Google Review.
   if (product.is_active) {
-    return (
-      <StatusScreen
-        icon={CheckCircle2}
-        tone="brand"
-        title="Sudah Diaktivasi"
-        message="QR/NFC ini sudah aktif sebelumnya. Jika ini bukan toko Anda, hubungi penyedia layanan."
-      />
-    );
+    redirect(`/r/${product.id}`);
   }
 
   if (product.pending_review) {
