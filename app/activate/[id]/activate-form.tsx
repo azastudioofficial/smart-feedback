@@ -33,7 +33,16 @@ const POLL_INTERVAL_MS = 5000;
 const BODY = { fontFamily: "var(--font-admin-body)" };
 const DISPLAY = { fontFamily: "var(--font-display)" };
 
-export function ActivateForm({ productId }: { productId: string }) {
+export function ActivateForm({
+  productId,
+  isPro,
+}: {
+  productId: string;
+  // Basic: pelanggan langsung di-redirect ke Google Review, tidak ada
+  // alur keluhan sama sekali - jadi WhatsApp owner (dipakai buat
+  // terusin keluhan pelanggan) tidak perlu ditanya di awal.
+  isPro: boolean;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +86,8 @@ export function ActivateForm({ productId }: { productId: string }) {
     const result = await activateProduct(productId, {
       businessName: String(form.get("businessName") ?? ""),
       googleReviewUrl: String(form.get("googleReviewUrl") ?? ""),
+      // Basic tidak punya field ini di form (lihat isPro di bawah) -
+      // dikirim kosong, bukan di-skip, biar bentuk datanya konsisten.
       ownerWhatsapp: String(form.get("ownerWhatsapp") ?? ""),
       email: String(form.get("email") ?? ""),
       password: String(form.get("password") ?? ""),
@@ -192,19 +203,21 @@ export function ActivateForm({ productId }: { productId: string }) {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="ownerWhatsapp" className="gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-[#132320]/40" />
-                  Nomor WhatsApp Owner
-                </Label>
-                <Input
-                  id="ownerWhatsapp"
-                  name="ownerWhatsapp"
-                  placeholder="0812xxxxxxxx"
-                  required
-                  className="h-11 text-base"
-                />
-              </div>
+              {isPro && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="ownerWhatsapp" className="gap-1.5">
+                    <Phone className="h-3.5 w-3.5 text-[#132320]/40" />
+                    Nomor WhatsApp Owner
+                  </Label>
+                  <Input
+                    id="ownerWhatsapp"
+                    name="ownerWhatsapp"
+                    placeholder="0812xxxxxxxx"
+                    required
+                    className="h-11 text-base"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-4 border-t border-black/[0.06] pt-5">
