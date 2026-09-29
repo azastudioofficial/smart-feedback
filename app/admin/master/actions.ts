@@ -25,6 +25,7 @@ type InventoryItem = {
   plan: Plan;
   reseller_name: string | null;
   created_at: string;
+  last_scanned_at: string | null;
 };
 
 /**
@@ -65,7 +66,7 @@ export async function getInventoryPage(
   let query = supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, resellers(name)",
+      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, last_scanned_at, resellers(name)",
       { count: "exact" }
     );
 
@@ -415,6 +416,32 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
         );
       }
     }
+  }
+
+  // Kosongkan statistik kartu supaya klien baru mulai dari nol. RPC
+  // admin_reset_product cuma mengosongkan data toko - riwayat scan lama
+  // tetap tinggal (angka Scan tidak berubah). scan_logs & positive_clicks
+  // (= klik tombol "Tulis Review di Google Maps") tidak punya policy
+  // DELETE untuk admin, jadi pakai service client.
+  const [scanDel, clickDel, lastScanReset] = await Promise.all([
+    service.from("scan_logs").delete().eq("product_id", productId),
+    service.from("positive_clicks").delete().eq("product_id", productId),
+    service
+      .from("products")
+      .update({ last_scanned_at: null })
+      .eq("id", productId),
+  ]);
+
+  const statsError = scanDel.error ?? clickDel.error ?? lastScanReset.error;
+  if (statsError) {
+    console.error("Produk sudah direset, tapi gagal mengosongkan statistik:", statsError.message);
+    revalidatePath("/admin/master");
+    revalidatePath("/reseller");
+    return {
+      success: false,
+      error:
+        "Data toko sudah direset, tapi riwayat scan gagal dikosongkan. Coba Reset sekali lagi.",
+    };
   }
 
   revalidatePath("/admin/master");
