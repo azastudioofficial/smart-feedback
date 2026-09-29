@@ -130,7 +130,12 @@ export function DashboardShell({
             </div>
           </div>
 
-          {active?.content}
+          {/* key={active.id} = konten di-mount ulang saat ganti tab, jadi
+              animasi .tab-enter jalan tiap tab berganti (perilaku state
+              tidak berubah: sebelumnya juga hanya tab aktif yang dirender). */}
+          <div key={active?.id} className="tab-enter">
+            {active?.content}
+          </div>
         </div>
       </main>
     </div>
