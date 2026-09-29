@@ -6,7 +6,6 @@ import { StoreProvider } from "./store-context";
 import { OwnerDashboardShell } from "./owner-dashboard-shell";
 import { logout } from "./actions";
 import { Button } from "@/components/ui/button";
-import { Lock } from "lucide-react";
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabase();
@@ -54,60 +53,38 @@ export default async function DashboardPage() {
     );
   }
 
-  // Paket Basic: dasbor lengkap terkunci. Owner tetap bisa login dan
-  // melihat statusnya, tapi fitur keluhan/analytics/QR/pengaturan hanya
-  // untuk Pro. Upgrade dilakukan admin lewat /admin/master.
-  if (products[0].plan !== "pro") {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F6F8F7] px-4">
-        <div className="w-full max-w-sm rounded-2xl border border-black/[0.06] bg-white p-7 text-center shadow-sm">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E4F1F1] text-[#0E7C86]">
-            <Lock className="h-6 w-6" />
-          </span>
-          <h1 className="mt-4 text-xl font-bold text-[#132320]">
-            Dasbor khusus paket Pro
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-[#132320]/60">
-            {products[0].business_name ?? "Toko Anda"} saat ini memakai paket
-            Basic: pelanggan yang scan langsung diarahkan ke Google Review.
-            Upgrade ke Pro untuk membuka rekap keluhan, analytics, cetak QR,
-            dan pengaturan toko. Hubungi penyedia layanan untuk upgrade.
-          </p>
-          <form action={logout} className="mt-5">
-            <Button type="submit" variant="outline">
-              Logout
-            </Button>
-          </form>
-        </div>
-      </main>
-    );
-  }
-
   // MVP: tampilkan toko pertama. Kalau owner punya beberapa akrilik,
   // bisa dikembangkan jadi selector di iterasi berikutnya.
   const activeProduct = products[0];
+  const isPro = activeProduct.plan === "pro";
 
-  // Data keluhan & statistik pakai service client - lebih ringkas
-  // untuk query gabungan, RLS tetap sudah divalidasi lewat pengecekan
-  // owner_id di atas.
+  // Paket Basic: TIDAK dikunci total lagi. Owner Basic tetap bisa
+  // masuk dan mengubah Pengaturan Toko (nama, link Google Review,
+  // WhatsApp, dst) - yang dikunci cuma tab Analytics/Rekap
+  // Keluhan/Cetak QR, karena itu semua fitur khusus alur Pro (lihat
+  // owner-dashboard-shell.tsx). Data keluhan & statistik cuma
+  // diambil untuk Pro, biar owner Basic tidak menunggu query yang
+  // hasilnya toh tidak dipakai.
   const service = createServiceClient();
 
   const [{ data: feedbacks }, { count: totalScans }, { count: totalPositive }] =
-    await Promise.all([
-      service
-        .from("feedbacks")
-        .select("id, customer_name, complaint_text, photo_path, photo_url, is_anonymous, status, created_at")
-        .eq("product_id", activeProduct.id)
-        .order("created_at", { ascending: false }),
-      service
-        .from("scan_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("product_id", activeProduct.id),
-      service
-        .from("positive_clicks")
-        .select("id", { count: "exact", head: true })
-        .eq("product_id", activeProduct.id),
-    ]);
+    isPro
+      ? await Promise.all([
+          service
+            .from("feedbacks")
+            .select("id, customer_name, complaint_text, photo_path, photo_url, is_anonymous, status, created_at")
+            .eq("product_id", activeProduct.id)
+            .order("created_at", { ascending: false }),
+          service
+            .from("scan_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("product_id", activeProduct.id),
+          service
+            .from("positive_clicks")
+            .select("id", { count: "exact", head: true })
+            .eq("product_id", activeProduct.id),
+        ])
+      : [{ data: [] }, { count: 0 }, { count: 0 }];
 
   // Nama toko / logo / warna brand "dititipkan" ke StoreProvider
   // sebagai nilai AWAL saja - setelah ini, begitu owner ganti apapun
@@ -121,6 +98,7 @@ export default async function DashboardPage() {
     >
       <OwnerDashboardShell
         product={activeProduct}
+        isPro={isPro}
         feedbacks={feedbacks ?? []}
         totalScans={totalScans ?? 0}
         totalPositive={totalPositive ?? 0}
