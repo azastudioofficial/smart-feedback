@@ -64,7 +64,7 @@ export default async function ActivatePage({ params }: Props) {
 
   const { data: product, error } = await supabase
     .from("products")
-    .select("id, is_active, is_suspended, pending_review")
+    .select("id, is_active, is_suspended, pending_review, plan")
     .eq("id", id)
     .maybeSingle();
 
@@ -119,7 +119,7 @@ export default async function ActivatePage({ params }: Props) {
         } as CSSProperties
       }
     >
-      <ActivateForm productId={product.id} />
+      <ActivateForm productId={product.id} isPro={product.plan === "pro"} />
     </main>
   );
 }
