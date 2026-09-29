@@ -33,9 +33,23 @@ type InventoryItem = {
  * membatasi: reseller cuma dapat kartu miliknya, admin dapat semua.
  * Ini menghindari narik SEMUA baris sekaligus saat data sudah banyak.
  */
+export type InventoryFilters = {
+  // Nama toko ATAU ID kartu (short_code) - dicek sekaligus di server
+  // biar admin nggak perlu tahu mau cari yang mana.
+  search?: string;
+  // "" / undefined = semua reseller. Cocok dengan kolom products.reseller_id.
+  resellerId?: string;
+  // Kosongkan untuk semua status. Nilainya dicek di JS setelah ambil
+  // data (bukan filter SQL) karena "status" kartu itu turunan dari 3
+  // kolom boolean sekaligus (is_suspended, pending_review, is_active),
+  // bukan 1 kolom tunggal.
+  status?: "aktif" | "stok_siap" | "menunggu" | "suspended" | "";
+};
+
 export async function getInventoryPage(
   page: number,
-  pageSize: number = 25
+  pageSize: number = 25,
+  filters: InventoryFilters = {}
 ): Promise<{
   success: boolean;
   data?: InventoryItem[];
@@ -48,12 +62,44 @@ export async function getInventoryPage(
   const from = (safePage - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from("products")
     .select(
       "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, resellers(name)",
       { count: "exact" }
-    )
+    );
+
+  if (filters.search?.trim()) {
+    // escape koma & spasi ganda - karakter itu berarti khusus di
+    // sintaks .or() milik PostgREST kalau tidak dibersihkan dulu.
+    const term = filters.search.trim().replace(/[,()%]/g, " ").slice(0, 100);
+    query = query.or(`business_name.ilike.%${term}%,short_code.ilike.%${term}%`);
+  }
+  if (filters.resellerId) {
+    query = query.eq("reseller_id", filters.resellerId);
+  }
+  switch (filters.status) {
+    case "suspended":
+      query = query.eq("is_suspended", true);
+      break;
+    case "menunggu":
+      query = query.eq("is_suspended", false).eq("pending_review", true);
+      break;
+    case "aktif":
+      query = query
+        .eq("is_suspended", false)
+        .eq("pending_review", false)
+        .eq("is_active", true);
+      break;
+    case "stok_siap":
+      query = query
+        .eq("is_suspended", false)
+        .eq("pending_review", false)
+        .eq("is_active", false);
+      break;
+  }
+
+  const { data, error, count } = await query
     .order("created_at", { ascending: false })
     .range(from, to);
 
