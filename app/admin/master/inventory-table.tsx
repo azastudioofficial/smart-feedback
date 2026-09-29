@@ -1,7 +1,7 @@
 "use client";
 // app/admin/master/inventory-table.tsx
 
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -34,6 +34,8 @@ import {
   ChevronRight,
   ExternalLink,
   Crown,
+  Search,
+  X,
 } from "lucide-react";
 import {
   toggleSuspend,
@@ -43,7 +45,9 @@ import {
   getInventoryPage,
   setPlan,
   setPlanByCodes,
+  listResellers,
   type Plan,
+  type InventoryFilters,
 } from "./actions";
 import { QrPrintDialog } from "@/components/qr-print-dialog";
 
@@ -102,9 +106,7 @@ function PlanBadge({ p }: { p: Product }) {
     );
   }
   return (
-    <Badge variant="outline" className="border-[#132320]/25 text-[#132320]/60">
-      Basic
-    </Badge>
+    <Badge className="bg-[#5B7B78] hover:bg-[#4D6663]">Basic</Badge>
   );
 }
 
@@ -131,6 +133,63 @@ export function InventoryTable({
   const [total, setTotal] = useState(totalCount ?? products.length);
   const [loadingPage, setLoadingPage] = useState(false);
 
+  // --- Filter (Reseller / Status / cari nama-toko atau ID kartu) ---
+  const [searchInput, setSearchInput] = useState(""); // apa yg diketik
+  const [search, setSearch] = useState(""); // versi ter-debounce, dipakai buat query
+  const [resellerFilter, setResellerFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<InventoryFilters["status"]>("");
+  const [resellerOptions, setResellerOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const filtersActive = Boolean(search || resellerFilter || statusFilter);
+
+  // Reseller cuma perlu difilter kalau kolom Reseller memang ditampilkan
+  // (halaman reseller sendiri cuma lihat kartunya sendiri lewat RLS).
+  useEffect(() => {
+    if (!showResellerColumn) return;
+    listResellers().then((res) => {
+      if (res.success && res.data) setResellerOptions(res.data);
+    });
+  }, [showResellerColumn]);
+
+  // Debounce 400ms - biar nggak nembak query tiap 1 huruf diketik.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const loadWithFilters = useCallback(
+    async (page: number) => {
+      setLoadingPage(true);
+      const result = await getInventoryPage(page, PAGE_SIZE, {
+        search,
+        resellerId: resellerFilter,
+        status: statusFilter,
+      });
+      setLoadingPage(false);
+      if (!result.success || !result.data) {
+        alert(result.error ?? "Gagal memuat data.");
+        return;
+      }
+      setItems(result.data);
+      setTotal(result.totalCount ?? 0);
+      setCurrentPage(page);
+    },
+    [search, resellerFilter, statusFilter]
+  );
+
+  // Filter berubah -> selalu balik ke halaman 1, biar nggak nyasar di
+  // halaman 2 dari filter sebelumnya yang hasilnya cuma dikit.
+  const isFirstRun = useState({ current: true })[0];
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
+    loadWithFilters(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, resellerFilter, statusFilter]);
+
   // --- Paket Basic/Pro (khusus Super Admin) ---
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -142,17 +201,13 @@ export function InventoryTable({
 
   async function goToPage(page: number) {
     if (page < 1 || page > totalPages || page === currentPage) return;
-    setLoadingPage(true);
-    const result = await getInventoryPage(page, PAGE_SIZE);
-    setLoadingPage(false);
+    await loadWithFilters(page);
+  }
 
-    if (!result.success || !result.data) {
-      alert(result.error ?? "Gagal memuat halaman.");
-      return;
-    }
-    setItems(result.data);
-    setTotal(result.totalCount ?? total);
-    setCurrentPage(page);
+  function clearFilters() {
+    setSearchInput("");
+    setResellerFilter("");
+    setStatusFilter("");
   }
 
   function toggleSelected(id: string) {
@@ -417,6 +472,67 @@ export function InventoryTable({
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
+        )}
+      </div>
+
+      {/* ===== Filter: cari / reseller / status ===== */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.06] px-5 py-3">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#132320]/35" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Cari nama toko atau ID kartu..."
+            className="h-11 pl-9"
+          />
+        </div>
+
+        {showResellerColumn && (
+          <select
+            value={resellerFilter}
+            onChange={(e) => setResellerFilter(e.target.value)}
+            aria-label="Filter reseller"
+            className="h-11 min-w-[180px] rounded-md border border-black/[0.12] bg-white px-3 text-sm text-[#132320] focus:outline-none focus:ring-2 focus:ring-[#0E7C86]/40"
+          >
+            <option value="">Semua Reseller</option>
+            {resellerOptions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <select
+          value={statusFilter}
+          onChange={(e) =>
+            setStatusFilter(e.target.value as InventoryFilters["status"])
+          }
+          aria-label="Filter status"
+          className="h-11 min-w-[170px] rounded-md border border-black/[0.12] bg-white px-3 text-sm text-[#132320] focus:outline-none focus:ring-2 focus:ring-[#0E7C86]/40"
+        >
+          <option value="">Semua Status</option>
+          <option value="aktif">Aktif</option>
+          <option value="stok_siap">Stok Siap</option>
+          <option value="menunggu">Menunggu Persetujuan</option>
+          <option value="suspended">Suspended</option>
+        </select>
+
+        {filtersActive && (
+          <Button
+            variant="ghost"
+            onClick={clearFilters}
+            className="h-11 gap-1 text-[#132320]/60"
+          >
+            <X className="h-4 w-4" />
+            Reset
+          </Button>
+        )}
+
+        {filtersActive && (
+          <span className="w-full text-sm text-[#132320]/55">
+            Menampilkan {total} kartu yang cocok dengan filter.
+          </span>
         )}
       </div>
 
