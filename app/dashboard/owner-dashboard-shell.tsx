@@ -90,7 +90,7 @@ export function OwnerDashboardShell({
           </p>
         </div>
       )}
-      <SettingsForm product={product} />
+      <SettingsForm product={product} isPro={isPro} />
     </>
   );
 
