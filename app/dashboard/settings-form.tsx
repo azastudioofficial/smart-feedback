@@ -133,7 +133,20 @@ function parsePosition(value: string | null): { x: number; y: number } {
   };
 }
 
-export function SettingsForm({ product }: { product: Product }) {
+export function SettingsForm({
+  product,
+  isPro,
+}: {
+  product: Product;
+  // Basic tidak punya halaman feedback custom (pelanggan langsung
+  // diarahkan ke Google Review), jadi field yang HANYA dipakai di
+  // situ (preview halaman, foto sampul, tautan sosial) disembunyikan.
+  // Logo & Warna Tema tetap tampil karena keduanya juga dipakai di
+  // dashboard sendiri (lihat store-context.tsx: --brand & logoUrl
+  // dipasang di sidebar utk SEMUA plan, bukan cuma di halaman
+  // feedback pelanggan).
+  isPro: boolean;
+}) {
   // updateStore() dari StoreProvider - dipakai untuk "menyiarkan"
   // perubahan ke header dashboard & tab Cetak QR SETELAH data yang
   // sama sudah tersimpan di Supabase lewat updateSettings()/removeLogo()
@@ -406,7 +419,14 @@ export function SettingsForm({ product }: { product: Product }) {
       const result = await updateSettings(product.id, {
         businessName,
         googleReviewUrl: String(form.get("googleReviewUrl") ?? ""),
-        ownerWhatsapp: String(form.get("ownerWhatsapp") ?? ""),
+        ownerWhatsapp: String(
+          // Basic: field ini tidak dirender, jadi form.get() selalu null.
+          // Pakai nilai LAMA sebagai fallback (bukan string kosong),
+          // supaya kalau kartu ini sebelumnya sempat Pro dan sudah
+          // ada nomor WA tersimpan, nomor itu tidak ikut ke-reset
+          // cuma gara-gara owner menyimpan Nama Toko/Link Review.
+          form.get("ownerWhatsapp") ?? product.owner_whatsapp ?? ""
+        ),
         logoUrl: uploadedLogoUrl,
         coverImageUrl: uploadedCoverUrl,
         // Dikirim tiap kali ADA foto sampul aktif (baru ataupun yang
@@ -472,31 +492,43 @@ export function SettingsForm({ product }: { product: Product }) {
           pelanggan lewat QR code), jadi owner tidak perlu scan QR
           cuma buat lihat/tes halamannya sendiri. target="_blank" biar
           dashboard-nya tidak ikut ke-tinggal. */}
-      <a
-        href={`/r/${product.short_code}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group flex items-center gap-3 rounded-xl border border-black/[0.06] bg-[#F6F8F7] p-3 transition-colors duration-200 hover:border-[var(--brand)]/30 hover:bg-[var(--brand)]/[0.05]"
-      >
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm transition-transform duration-200 group-hover:scale-105"
-          style={{
-            background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
-          }}
+      {/* Paket Basic tidak punya halaman feedback custom - link ini
+          cuma bikin bingung kalau ditampilkan (hasilnya cuma redirect
+          instan ke Google Review, bukan halaman apa-apa buat dilihat). */}
+      {isPro && (
+        <a
+          href={`/r/${product.short_code}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-center gap-3 rounded-xl border border-black/[0.06] bg-[#F6F8F7] p-3 transition-colors duration-200 hover:border-[var(--brand)]/30 hover:bg-[var(--brand)]/[0.05]"
         >
-          <ExternalLink className="h-4 w-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold text-[#132320]">
-            Lihat Halaman Feedback
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm transition-transform duration-200 group-hover:scale-105"
+            style={{
+              background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+            }}
+          >
+            <ExternalLink className="h-4 w-4" />
           </span>
-          <span className="block text-[11px] text-[#132320]/50">
-            Buka tampilan yang dilihat pelanggan - tanpa perlu scan QR
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold text-[#132320]">
+              Lihat Halaman Feedback
+            </span>
+            <span className="block text-[11px] text-[#132320]/50">
+              Buka tampilan yang dilihat pelanggan - tanpa perlu scan QR
+            </span>
           </span>
-        </span>
-      </a>
+        </a>
+      )}
 
       <div className="space-y-5 border-t border-black/[0.06] pt-5">
+        {/* Logo tadinya tetap tampil buat semua plan karena juga
+            dipakai di sidebar dashboard (lihat store-context.tsx) -
+            tapi sesuai keputusan terbaru, Basic disederhanakan jadi
+            CUMA Nama Toko + Link Google Review. Sidebar Basic jadi
+            pakai ikon default, bukan logo custom - itu trade-off yang
+            disengaja, bukan bug. */}
+        {isPro && (
         <div>
           <Label>Logo Toko</Label>
           <div className="mt-2 flex items-center gap-4">
@@ -539,11 +571,16 @@ export function SettingsForm({ product }: { product: Product }) {
             halaman feedback pelanggan.
           </p>
         </div>
+        )}
 
         {/* Foto Sampul - beda dari Logo: ini gambar LEBAR (landscape),
             tampil sebagai banner di paling atas halaman feedback
             pelanggan. Kalau tidak diisi, halaman feedback tetap tampil
             rapi seperti biasa (tidak ada bagian yang kosong/rusak). */}
+        {/* Cuma dipakai sebagai banner di halaman feedback custom -
+            tidak relevan buat Basic yang pelanggannya langsung
+            di-redirect ke Google Review, tidak pernah lihat halaman ini. */}
+        {isPro && (
         <div className="border-t border-black/[0.06] pt-5">
           <Label className="gap-1.5">
             <ImageIcon className="h-3.5 w-3.5 text-[#132320]/40" />
@@ -594,6 +631,7 @@ export function SettingsForm({ product }: { product: Product }) {
             ikut tersimpan waktu klik &quot;Simpan Pengaturan&quot; di bawah.
           </p>
         </div>
+        )}
 
         <div className="space-y-1">
           <Label htmlFor="businessName">Nama Toko / Bisnis</Label>
@@ -618,6 +656,7 @@ export function SettingsForm({ product }: { product: Product }) {
           />
         </div>
 
+        {isPro && (
         <div className="space-y-1">
           <Label htmlFor="ownerWhatsapp">Nomor WhatsApp Owner</Label>
           <Input
@@ -628,7 +667,9 @@ export function SettingsForm({ product }: { product: Product }) {
             className="h-11 text-base"
           />
         </div>
+        )}
 
+        {isPro && (
         <div>
           <Label>Warna Tema</Label>
           <p className="mt-1 text-xs text-[#132320]/45">
@@ -662,6 +703,7 @@ export function SettingsForm({ product }: { product: Product }) {
             <span className="text-xs text-[#132320]/50">{brandColor}</span>
           </div>
         </div>
+        )}
 
         {/* Connect with Us - daftar tautan (Instagram, Website, Katalog,
             TikTok, Shopee, dst) yang muncul di halaman feedback
@@ -669,6 +711,9 @@ export function SettingsForm({ product }: { product: Product }) {
             baru terbuka ke bawah kalau pelanggan klik. Kosongkan section
             ini (hapus semua baris) kalau tidak mau bagian itu muncul
             sama sekali di halaman pelanggan. */}
+        {/* Cuma muncul di halaman feedback custom - tidak relevan
+            buat Basic (lihat catatan isPro di komentar props atas). */}
+        {isPro && (
         <div className="border-t border-black/[0.06] pt-5">
           <Label className="gap-1.5">
             <Share2 className="h-3.5 w-3.5 text-[#132320]/40" />
@@ -863,6 +908,7 @@ export function SettingsForm({ product }: { product: Product }) {
             </Button>
           </div>
         </div>
+        )}
 
         {message && <p className="text-sm text-[var(--brand)]">{message}</p>}
         {error && <p className="text-sm text-[#B5585E]">{error}</p>}
