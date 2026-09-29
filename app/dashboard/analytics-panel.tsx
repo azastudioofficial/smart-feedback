@@ -2,7 +2,7 @@
 // app/dashboard/analytics-panel.tsx
 
 import { useEffect, useState } from "react";
-import { ScanLine, Smile, MessageCircle } from "lucide-react";
+import { ScanLine, Star, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
@@ -77,10 +77,13 @@ export function AnalyticsPanel({
     };
   }, [productId]);
 
-  const totalResponded = totalPositive + totalComplaints;
-  const satisfactionRate =
-    totalResponded > 0
-      ? Math.round((totalPositive / totalResponded) * 100)
+  // totalPositive = jumlah klik tombol "Tulis Review di Google Maps"
+  // (tabel positive_clicks). Konversi = berapa % scan yang lanjut
+  // membuka Google Review. Dibatasi 100% karena satu orang bisa klik
+  // berulang kali.
+  const reviewRate =
+    totalScans > 0
+      ? Math.min(100, Math.round((totalPositive / totalScans) * 100))
       : 0;
 
   return (
@@ -96,10 +99,15 @@ export function AnalyticsPanel({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard icon={ScanLine} label="Total Scan" value={totalScans} tone="neutral" />
-        <StatCard icon={Smile} label="Puas / Bagus" value={totalPositive} tone="teal" />
+        <StatCard
+          icon={Star}
+          label="Klik Review Google"
+          value={totalPositive}
+          tone="teal"
+        />
         <StatCard
           icon={MessageCircle}
-          label="Kurang Puas"
+          label="Pesan ke Owner / CS"
           value={totalComplaints}
           tone="rose"
         />
@@ -107,14 +115,14 @@ export function AnalyticsPanel({
 
       <div className={`${CARD_SHELL} p-6 text-center`}>
         <p className="text-sm text-[#132320]/50">
-          Rasio kepuasan (dari yang memberi respons)
+          Konversi ke Review Google (klik review dari total scan)
         </p>
         <p className="mt-1 text-3xl font-extrabold text-[#132320]" style={HEADING}>
-          {satisfactionRate}%
+          {reviewRate}%
         </p>
-        {totalResponded === 0 && (
+        {totalScans === 0 && (
           <p className="mt-1 text-xs text-[#132320]/40">
-            Belum ada yang klik &quot;Puas&quot; atau kirim keluhan.
+            Belum ada yang scan kartu ini.
           </p>
         )}
       </div>
