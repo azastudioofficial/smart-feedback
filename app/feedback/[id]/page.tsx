@@ -73,7 +73,7 @@ export default async function FeedbackPage({ params }: Props) {
 
   return (
     <main
-      className="relative flex min-h-[100dvh] items-start justify-center overflow-hidden bg-[#F3F4F1] px-4 pb-6 pt-8 sm:items-center sm:py-10"
+      className="relative flex min-h-[100dvh] items-start justify-center overflow-hidden bg-[#F3F4F1] px-4 pb-24 pt-8 sm:items-center sm:py-10"
       style={
         {
           "--brand": brandColor,
@@ -118,6 +118,10 @@ export default async function FeedbackPage({ params }: Props) {
         <FeedbackCard product={product} />
       </div>
 
+      {/* Posisi absolute (bukan fixed) + ruang kosong di bawah kartu
+          (pb-24): dulu tombol ini melayang di atas layar dan menutupi
+          tombol panah kartu saat halaman digulir di HP. Sekarang ia
+          duduk di bawah kartu, di luar area konten. */}
       {/* Shortcut buat OWNER - kartu QR yang sama di-scan pelanggan
           maupun owner sendiri, jadi owner perlu jalan pintas ke
           dashboard tanpa harus inget/ketik URL terpisah. Sengaja
@@ -127,7 +131,7 @@ export default async function FeedbackPage({ params }: Props) {
           tidak membuka celah akses apapun, cuma jalan pintas navigasi. */}
       <Link
         href="/login"
-        className="fixed bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-[#132320]/30 shadow-sm backdrop-blur transition hover:text-[#132320]/70 active:scale-95"
+        className="absolute bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-[#132320]/30 shadow-sm backdrop-blur transition hover:text-[#132320]/70 active:scale-95"
         title="Kelola Toko (khusus owner)"
       >
         <Settings className="h-5 w-5" />
