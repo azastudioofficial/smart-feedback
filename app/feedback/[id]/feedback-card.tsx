@@ -101,49 +101,56 @@ function ActionCard({
       aria-haspopup={ariaHaspopup}
       // bg/ring di className = cadangan kalau browser lama menolak
       // color-mix() di style di bawah (style yang valid tetap menang).
-      className="group relative flex w-full items-center gap-3 rounded-[20px] bg-[#F6F8F7] p-3 text-left ring-1 ring-black/[0.06] transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.985] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 min-[400px]:gap-3.5 min-[400px]:p-3.5"
+      className="group relative block w-full rounded-[22px] bg-[#F6F8F7] p-4 text-left ring-1 ring-black/[0.06] transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.985] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       style={{
         background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 11%, white), color-mix(in srgb, ${accent} 3%, white) 70%)`,
         boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 16%, white), 0 10px 24px -16px color-mix(in srgb, ${accent} 55%, transparent)`,
       }}
     >
-      <span
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white transition-transform duration-300 group-hover:scale-105 min-[400px]:h-14 min-[400px]:w-14"
-        style={{
-          backgroundColor: `color-mix(in srgb, ${accent} 14%, white)`,
-          color: accent,
-          boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 12%, white)`,
-        }}
-      >
-        {icon}
-      </span>
-
-      <span className="min-w-0 flex-1">
-        <span className="block text-[14px] font-semibold leading-snug text-[#132320]">
-          {title}
-        </span>
-        <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-[#132320]/65">
-          {description}
-        </span>
+      {/* Baris atas: ikon + judul + deskripsi memakai SELURUH lebar sisa
+          (tanpa tombol panah di sampingnya), jadi judul muat 1 baris dan
+          teks tidak sempit. */}
+      <span className="flex items-start gap-3.5">
         <span
-          className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-black/[0.04] py-1 pl-1.5 pr-2.5 text-[11px] font-medium text-[#132320]/70"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
           style={{
-            backgroundColor: `color-mix(in srgb, ${accent} 10%, white)`,
+            backgroundColor: `color-mix(in srgb, ${accent} 17%, white)`,
+            color: accent,
+            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 14%, white)`,
           }}
         >
-          {chip}
+          {icon}
+        </span>
+
+        <span className="min-w-0 flex-1 pt-0.5">
+          <span className="block text-[14px] font-semibold leading-snug text-[#132320]">
+            {title}
+          </span>
+          <span className="mt-1 block text-[12px] leading-relaxed text-[#132320]/65">
+            {description}
+          </span>
         </span>
       </span>
 
+      {/* Baris bawah: strip aksi selebar kartu - label di kiri, panah di
+          kanan. Lebar penuh berarti label tidak lagi terpotong "...". */}
       <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-md transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
-        style={{ backgroundColor: accent }}
+        className="mt-3.5 flex w-full items-center gap-2 rounded-full bg-black/[0.04] py-1.5 pl-2 pr-1.5 text-[11px] font-medium text-[#132320]/75"
+        style={{
+          backgroundColor: `color-mix(in srgb, ${accent} 11%, white)`,
+        }}
       >
-        {busy ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <ArrowRight className="h-4 w-4" />
-        )}
+        {chip}
+        <span
+          className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
+          style={{ backgroundColor: accent }}
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ArrowRight className="h-3.5 w-3.5" />
+          )}
+        </span>
       </span>
     </button>
   );
@@ -230,7 +237,7 @@ function ConnectWithUs({
           "Tulis Review" & "Laporkan Masalah". Judul & chip mengikuti
           tautan yang BENAR-BENAR diisi owner (bukan teks tetap), supaya
           tidak menjanjikan "Menu" kalau toko cuma punya Instagram. */}
-      <div className="mt-3">
+      <div className="mt-3.5">
         <ActionCard
           onClick={handleOpen}
           ariaHaspopup="dialog"
@@ -256,7 +263,7 @@ function ConnectWithUs({
               >
                 <Share2 className="h-2.5 w-2.5" />
               </span>
-              <span className="truncate">
+              <span className="min-w-0 truncate">
                 {[...mainLinks, ...iconLinks]
                   .slice(0, 3)
                   .map((l) => socialLinkDisplayLabel(l))
@@ -778,7 +785,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           {!hasCover && <BrandMarkGlow product={product} />}
 
           <p
-            className={`text-[10px] font-semibold uppercase tracking-[0.26em] text-[var(--brand)] ${eyebrowTopClass}`}
+            className={`text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--brand)] ${eyebrowTopClass}`}
             style={DISPLAY}
           >
             Terima kasih sudah berkunjung
@@ -805,10 +812,10 @@ export function FeedbackCard({ product }: { product: Product }) {
             />
           )}
 
-          <p className="mt-4 text-[15px] font-semibold text-[#132320]">
+          <p className="mt-5 text-[15px] font-semibold text-[#132320]">
             Bagaimana pengalaman Anda hari ini?
           </p>
-          <p className="mx-auto mt-1 max-w-[250px] text-[12px] leading-snug text-[#132320]/50">
+          <p className="mx-auto mt-1.5 max-w-[260px] text-[12px] leading-relaxed text-[#132320]/55">
             Kami selalu ingin memberikan yang terbaik untuk Anda.
           </p>
 
@@ -816,23 +823,25 @@ export function FeedbackCard({ product }: { product: Product }) {
               form dibuang biar ruang untuk mengetik lebih lega).
               Teksnya sengaja umum supaya cocok untuk semua jenis usaha. */}
           {step === "choice" ? (
-            <div className="mt-4 grid w-full grid-cols-3 divide-x divide-black/[0.07]">
+            <div className="mt-6 grid w-full grid-cols-3 divide-x divide-black/[0.07]">
               {[
-                { icon: ShieldCheck, label: "Pelayanan Terbaik" },
-                { icon: Star, label: "Kualitas Terjamin" },
-                { icon: Heart, label: "Kepuasan Pelanggan" },
-              ].map(({ icon: Icon, label }) => (
+                { icon: ShieldCheck, top: "Pelayanan", bottom: "Terbaik" },
+                { icon: Star, top: "Kualitas", bottom: "Terjamin" },
+                { icon: Heart, top: "Kepuasan", bottom: "Pelanggan" },
+              ].map(({ icon: Icon, top, bottom }) => (
                 <div
-                  key={label}
-                  className="flex flex-col items-center gap-1.5 px-1.5"
+                  key={top}
+                  className="flex flex-col items-center gap-2 px-2"
                 >
                   <Icon
-                    className="h-[18px] w-[18px]"
+                    className="h-5 w-5"
                     style={{ color: "var(--brand)" }}
-                    strokeWidth={1.75}
+                    strokeWidth={1.6}
                   />
-                  <span className="text-[11px] font-medium leading-tight text-[#132320]/65">
-                    {label}
+                  <span className="text-center text-[11px] font-medium leading-snug text-[#132320]/65">
+                    {top}
+                    <br />
+                    {bottom}
                   </span>
                 </div>
               ))}
@@ -842,9 +851,9 @@ export function FeedbackCard({ product }: { product: Product }) {
           )}
         </CardHeader>
 
-        <CardContent className="px-5 pb-4 sm:px-6">
+        <CardContent className="px-4 pb-5 min-[400px]:px-5 sm:px-6">
           {step === "choice" && (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               <ActionCard
                 onClick={handleSatisfied}
                 busy={reviewing}
@@ -1038,7 +1047,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
         {/* Footer ucapan terima kasih - tulisan tangan + gelombang lembut
             berwarna brand toko di dasar kartu. */}
-        <div className="relative overflow-hidden px-6 pb-8 pt-3 text-center">
+        <div className="relative overflow-hidden px-6 pb-10 pt-6 text-center">
           <svg
             className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full"
             viewBox="0 0 100 24"
