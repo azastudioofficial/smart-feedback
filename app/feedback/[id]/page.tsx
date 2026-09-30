@@ -73,7 +73,7 @@ export default async function FeedbackPage({ params }: Props) {
 
   return (
     <main
-      className="relative flex min-h-[100dvh] items-start justify-center overflow-hidden bg-[#F3F4F1] px-4 pb-24 pt-8 sm:items-center sm:py-10"
+      className="relative flex min-h-[100dvh] items-start justify-center overflow-hidden bg-[#F3F4F1] sm:items-center sm:px-4 sm:py-10"
       style={
         {
           "--brand": brandColor,
@@ -86,7 +86,7 @@ export default async function FeedbackPage({ params }: Props) {
           premium (Linear/Vercel), bikin background nggak keliatan
           kosong polos tapi tetap tidak mengganggu. */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.5]"
+        className="pointer-events-none absolute inset-0 hidden opacity-[0.5] sm:block"
         style={{
           backgroundImage:
             "radial-gradient(circle, rgba(19,35,32,0.07) 1px, transparent 1px)",
@@ -97,24 +97,24 @@ export default async function FeedbackPage({ params }: Props) {
       {/* Orb warna brand yang di-blur besar di pojok - ngasih "warna"
           ke background tanpa bikin ramai/norak. */}
       <div
-        className="pointer-events-none absolute -left-28 -top-28 h-80 w-80 rounded-full blur-3xl"
+        className="pointer-events-none absolute -left-28 -top-28 hidden h-80 w-80 rounded-full blur-3xl sm:block"
         style={{ backgroundColor: brandColor, opacity: 0.16 }}
       />
       <div
-        className="pointer-events-none absolute -bottom-32 -right-20 h-96 w-96 rounded-full blur-3xl"
+        className="pointer-events-none absolute -bottom-32 -right-20 hidden h-96 w-96 rounded-full blur-3xl sm:block"
         style={{ backgroundColor: brandDark, opacity: 0.12 }}
       />
 
       {/* Glow lembut tepat di belakang kartu, biar kartunya "nyala" /
           jadi pusat perhatian - bukan cuma numpuk di background polos. */}
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl sm:block"
         style={{
           background: `radial-gradient(circle, ${brandTint} 0%, transparent 70%)`,
         }}
       />
 
-      <div className="relative z-10">
+      <div className="relative z-10 flex min-h-[100dvh] w-full justify-center sm:min-h-0 sm:w-auto">
         <FeedbackCard product={product} />
       </div>
 
@@ -131,7 +131,7 @@ export default async function FeedbackPage({ params }: Props) {
           tidak membuka celah akses apapun, cuma jalan pintas navigasi. */}
       <Link
         href="/login"
-        className="absolute bottom-5 right-5 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/70 text-[#132320]/30 shadow-sm backdrop-blur transition hover:text-[#132320]/70 active:scale-95"
+        className="absolute right-3 top-3 z-20 flex h-11 w-11 sm:bottom-5 sm:right-5 sm:top-auto items-center justify-center rounded-full bg-white/70 text-[#132320]/30 shadow-sm backdrop-blur transition hover:text-[#132320]/70 active:scale-95"
         title="Kelola Toko (khusus owner)"
       >
         <Settings className="h-5 w-5" />
