@@ -102,7 +102,10 @@ export type DailyPoint = {
   label: string;
   scans: number;
   clicks: number;
+  messages: number;
 };
+
+export type Slot = { weekday: number; hour: number; n: number };
 
 export type AnalyticsResult = {
   period: Period;
@@ -124,6 +127,10 @@ export type AnalyticsResult = {
   maxHeat: number;
   peakWeekday: number | null;
   peakHour: number | null;
+  /** 3 sel hari x jam tersibuk (untuk sorotan di peta panas). */
+  topSlots: Slot[];
+  /** rata-rata scan per hari sejak aktivitas pertama di periode ini. */
+  avgPerDay: number;
   /** cukup data untuk menyimpulkan pola jam/hari? */
   hasPattern: boolean;
   /** pecahan setelah scan */
@@ -176,11 +183,13 @@ export function computeAnalytics(input: {
   let pending = 0;
   let resolved = 0;
   let prevMessages = 0;
+  const messagesPerDay = new Map<number, number>();
   for (const c of input.complaints) {
     const t = new Date(c.created_at).getTime();
     if (Number.isNaN(t)) continue;
     const d = wibDayIndex(t);
     if (d >= from && d <= today) {
+      messagesPerDay.set(d, (messagesPerDay.get(d) ?? 0) + 1);
       messages++;
       if (c.status === "Resolved") resolved++;
       else pending++;
@@ -221,6 +230,7 @@ export function computeAnalytics(input: {
       label: formatDayIndex(d),
       scans: cell.scans,
       clicks: cell.clicks,
+      messages: messagesPerDay.get(d) ?? 0,
     };
     daily.push(point);
     maxDaily = Math.max(maxDaily, cell.scans, cell.clicks);
@@ -254,6 +264,20 @@ export function computeAnalytics(input: {
   const peakWeekday = hasPattern ? argmax(dayTotals) : null;
   const peakHour = hasPattern ? argmax(hourTotals) : null;
 
+  const slots: Slot[] = [];
+  for (let w = 0; w < 7; w++) {
+    for (let h = 0; h < 24; h++) {
+      if (heat[w][h] > 0) slots.push({ weekday: w, hour: h, n: heat[w][h] });
+    }
+  }
+  slots.sort((a, b) => b.n - a.n || a.weekday - b.weekday || a.hour - b.hour);
+  const topSlots = hasPattern ? slots.slice(0, 3) : [];
+
+  const firstActive = daily.find((p) => p.scans > 0);
+  const activeDays = firstActive ? today - firstActive.dayIdx + 1 : 0;
+  const avgPerDay =
+    activeDays > 0 ? Math.round((scans / activeDays) * 10) / 10 : 0;
+
   // Pecahan setelah scan. Klik bisa berulang per orang & bisa lebih besar
   // dari scan -> penyebut pakai yang terbesar supaya tidak lewat 100%.
   const acted = clicks + messages;
@@ -279,13 +303,19 @@ export function computeAnalytics(input: {
     maxHeat,
     peakWeekday,
     peakHour,
+    topSlots,
+    avgPerDay,
     hasPattern,
     breakdown: { review: clicks, message: messages, idle, total },
     busiestDay,
   };
 }
 
-export type Insight = { tone: "good" | "warn" | "info"; text: string };
+export type Insight = {
+  tone: "good" | "warn" | "info";
+  kind: "empty" | "trend" | "conversion" | "peak" | "complaint";
+  text: string;
+};
 
 export function buildInsights(r: AnalyticsResult): Insight[] {
   const out: Insight[] = [];
@@ -294,6 +324,7 @@ export function buildInsights(r: AnalyticsResult): Insight[] {
     return [
       {
         tone: "info",
+        kind: "empty",
         text: "Belum ada scan pada periode ini. Pastikan kartu QR sudah terpasang di tempat yang mudah dilihat pelanggan.",
       },
     ];
@@ -304,16 +335,19 @@ export function buildInsights(r: AnalyticsResult): Insight[] {
     if (Math.abs(p) < 5) {
       out.push({
         tone: "info",
+        kind: "trend",
         text: `Jumlah scan stabil dibanding ${r.period} hari sebelumnya.`,
       });
     } else if (p > 0) {
       out.push({
         tone: "good",
+        kind: "trend",
         text: `Scan naik ${p}% dibanding ${r.period} hari sebelumnya.`,
       });
     } else {
       out.push({
         tone: "warn",
+        kind: "trend",
         text: `Scan turun ${Math.abs(p)}% dibanding ${r.period} hari sebelumnya. Cek apakah kartu QR masih terlihat jelas di lokasi.`,
       });
     }
@@ -321,6 +355,7 @@ export function buildInsights(r: AnalyticsResult): Insight[] {
 
   out.push({
     tone: r.conversion >= 40 ? "good" : "info",
+    kind: "conversion",
     text: `${r.clicks} dari ${r.scans} scan lanjut membuka Google Review (${r.conversion}%).${
       r.conversion < 40 && r.scans >= 20
         ? " Menawarkan langsung ke pelanggan saat membayar biasanya menaikkan angka ini."
@@ -331,6 +366,7 @@ export function buildInsights(r: AnalyticsResult): Insight[] {
   if (r.hasPattern && r.peakWeekday !== null && r.peakHour !== null) {
     out.push({
       tone: "info",
+      kind: "peak",
       text: `Pelanggan paling banyak scan hari ${DAY_NAMES[r.peakWeekday]}, sekitar jam ${formatHourRange(r.peakHour)}. Waktu terbaik untuk mengingatkan tim menawarkan review.`,
     });
   }
@@ -338,11 +374,13 @@ export function buildInsights(r: AnalyticsResult): Insight[] {
   if (r.pending > 0) {
     out.push({
       tone: "warn",
+      kind: "complaint",
       text: `${r.pending} pesan pelanggan belum ditandai selesai. Buka Rekap Keluhan untuk menindaklanjuti.`,
     });
   } else if (r.messages > 0) {
     out.push({
       tone: "good",
+      kind: "complaint",
       text: "Semua pesan pelanggan pada periode ini sudah ditandai selesai.",
     });
   }
