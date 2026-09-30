@@ -703,11 +703,14 @@ export function FeedbackCard({ product }: { product: Product }) {
 
   return (
     <div
-      className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-500 motion-reduce:animate-none md:max-w-md"
+      className="flex w-full animate-in fade-in slide-in-from-bottom-3 flex-col duration-500 motion-reduce:animate-none sm:w-[24rem] md:w-[28rem]"
       style={BODY}
     >
       <Card
-        className={`relative overflow-hidden border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(19,35,32,0.04),0_35px_70px_-25px_rgba(19,35,32,0.38)] ${
+        // Di HP: kartu memenuhi layar (tanpa bingkai/bayangan) seperti
+        // aplikasi native. Mulai layar >= sm (tablet/desktop): kembali
+        // jadi kartu melayang dengan sudut membulat dan bayangan.
+        className={`relative flex-1 overflow-hidden rounded-none border-black/[0.04] bg-white ring-0 sm:flex-none sm:rounded-xl sm:ring-1 sm:shadow-[0_1px_2px_rgba(19,35,32,0.04),0_35px_70px_-25px_rgba(19,35,32,0.38)] ${
           hasCover ? "pb-0 pt-0" : "pb-0"
         }`}
       >
@@ -726,7 +729,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
         {hasCover && (
           <div className="relative">
-            <div className="relative h-36 w-full sm:h-44">
+            <div className="relative h-40 w-full sm:h-44">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={product.cover_image_url ? cloudinaryThumbnail(product.cover_image_url, "f_auto,q_auto,w_800") : undefined}
@@ -1047,7 +1050,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
         {/* Footer ucapan terima kasih - tulisan tangan + gelombang lembut
             berwarna brand toko di dasar kartu. */}
-        <div className="relative overflow-hidden px-6 pb-10 pt-6 text-center">
+        <div className="relative mt-auto overflow-hidden px-6 pb-10 pt-6 text-center">
           <svg
             className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full"
             viewBox="0 0 100 24"
