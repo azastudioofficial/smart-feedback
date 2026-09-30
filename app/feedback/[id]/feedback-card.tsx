@@ -29,11 +29,9 @@ import {
   ShieldCheck,
   CheckCircle2,
   Store,
-  Star,
   ArrowRight,
   Share2,
   BookOpen,
-  Heart,
 } from "lucide-react";
 import {
   compressComplaintPhoto,
@@ -822,36 +820,9 @@ export function FeedbackCard({ product }: { product: Product }) {
             Kami selalu ingin memberikan yang terbaik untuk Anda.
           </p>
 
-          {/* 3 nilai layanan - hanya di langkah pilihan (di langkah
-              form dibuang biar ruang untuk mengetik lebih lega).
-              Teksnya sengaja umum supaya cocok untuk semua jenis usaha. */}
-          {step === "choice" ? (
-            <div className="mt-6 grid w-full grid-cols-3 divide-x divide-black/[0.07]">
-              {[
-                { icon: ShieldCheck, top: "Pelayanan", bottom: "Terbaik" },
-                { icon: Star, top: "Kualitas", bottom: "Terjamin" },
-                { icon: Heart, top: "Kepuasan", bottom: "Pelanggan" },
-              ].map(({ icon: Icon, top, bottom }) => (
-                <div
-                  key={top}
-                  className="flex flex-col items-center gap-2 px-2"
-                >
-                  <Icon
-                    className="h-5 w-5"
-                    style={{ color: "var(--brand)" }}
-                    strokeWidth={1.6}
-                  />
-                  <span className="text-center text-[11px] font-medium leading-snug text-[#132320]/65">
-                    {top}
-                    <br />
-                    {bottom}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 h-px w-10 bg-[#132320]/10" />
-          )}
+          {/* Garis pemisah tipis - penegas transisi ke bagian pilihan
+              di bawah. */}
+          <div className="mt-5 h-px w-10 bg-[#132320]/10" />
         </CardHeader>
 
         <CardContent className="px-4 pb-5 min-[400px]:px-5 sm:px-6">
