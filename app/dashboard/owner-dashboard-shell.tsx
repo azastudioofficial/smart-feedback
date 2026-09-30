@@ -18,6 +18,7 @@ import { QrTab } from "./qr-tab";
 import { SettingsForm } from "./settings-form";
 import { useStore } from "./store-context";
 import type { SocialLink } from "@/lib/social-links";
+import type { ScanBucket, ClickBucket } from "@/lib/analytics";
 import { Lock } from "lucide-react";
 
 type Product = {
@@ -48,8 +49,9 @@ export function OwnerDashboardShell({
   product,
   isPro,
   feedbacks,
-  totalScans,
-  totalPositive,
+  scanBuckets,
+  clickBuckets,
+  analyticsFailed,
   userEmail,
   logoutAction,
 }: {
@@ -59,8 +61,9 @@ export function OwnerDashboardShell({
   // app/dashboard/page.tsx untuk alasan gerbangnya dipindah ke sini).
   isPro: boolean;
   feedbacks: Feedback[];
-  totalScans: number;
-  totalPositive: number;
+  scanBuckets: ScanBucket[];
+  clickBuckets: ClickBucket[];
+  analyticsFailed: boolean;
   userEmail: string;
   logoutAction: () => void;
 }) {
@@ -106,9 +109,10 @@ export function OwnerDashboardShell({
           content: (
             <AnalyticsPanel
               productId={product.id}
-              totalScans={totalScans}
-              totalPositive={totalPositive}
-              totalComplaints={feedbacks.length}
+              scanBuckets={scanBuckets}
+              clickBuckets={clickBuckets}
+              loadFailed={analyticsFailed}
+              feedbacks={feedbacks}
             />
           ),
         },
