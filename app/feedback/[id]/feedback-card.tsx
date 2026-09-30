@@ -80,6 +80,7 @@ function ActionCard({
   description,
   chip,
   ariaHaspopup,
+  busy = false,
 }: {
   onClick: () => void;
   accent: string;
@@ -88,20 +89,26 @@ function ActionCard({
   description: string;
   chip: ReactNode;
   ariaHaspopup?: "dialog";
+  /** true = sedang memproses (tombol dikunci + panah jadi spinner). */
+  busy?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={busy}
+      aria-busy={busy || undefined}
       aria-haspopup={ariaHaspopup}
-      className="group relative flex w-full items-center gap-3.5 rounded-[20px] p-3.5 text-left transition-all duration-300 hover:-translate-y-0.5 active:scale-[0.985]"
+      // bg/ring di className = cadangan kalau browser lama menolak
+      // color-mix() di style di bawah (style yang valid tetap menang).
+      className="group relative flex w-full items-center gap-3 rounded-[20px] bg-[#F6F8F7] p-3 text-left ring-1 ring-black/[0.06] transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.985] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 min-[400px]:gap-3.5 min-[400px]:p-3.5"
       style={{
         background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 11%, white), color-mix(in srgb, ${accent} 3%, white) 70%)`,
         boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 16%, white), 0 10px 24px -16px color-mix(in srgb, ${accent} 55%, transparent)`,
       }}
     >
       <span
-        className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 group-hover:scale-105"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white transition-transform duration-300 group-hover:scale-105 min-[400px]:h-14 min-[400px]:w-14"
         style={{
           backgroundColor: `color-mix(in srgb, ${accent} 14%, white)`,
           color: accent,
@@ -115,11 +122,11 @@ function ActionCard({
         <span className="block text-[14px] font-semibold leading-snug text-[#132320]">
           {title}
         </span>
-        <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-[#132320]/55">
+        <span className="mt-0.5 line-clamp-2 block text-[11.5px] leading-snug text-[#132320]/65">
           {description}
         </span>
         <span
-          className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full py-1 pl-1.5 pr-2.5 text-[10.5px] font-medium text-[#132320]/70"
+          className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-black/[0.04] py-1 pl-1.5 pr-2.5 text-[11px] font-medium text-[#132320]/70"
           style={{
             backgroundColor: `color-mix(in srgb, ${accent} 10%, white)`,
           }}
@@ -129,10 +136,14 @@ function ActionCard({
       </span>
 
       <span
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-md transition-transform duration-300 group-hover:translate-x-0.5"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white shadow-md transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
         style={{ backgroundColor: accent }}
       >
-        <ArrowRight className="h-4 w-4" />
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <ArrowRight className="h-4 w-4" />
+        )}
       </span>
     </button>
   );
@@ -179,6 +190,8 @@ function ConnectWithUs({
 }) {
   const [open, setOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // Lock scroll body + tutup pakai tombol Escape - standar UX bottom
   // sheet di app native maupun web modern.
@@ -190,9 +203,14 @@ function ConnectWithUs({
       if (e.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", handleKeyDown);
+    // Fokus pindah ke tombol tutup begitu sheet terbuka (pembaca layar &
+    // keyboard tablet), lalu balik ke tombol pemicu waktu ditutup.
+    closeBtnRef.current?.focus();
+    const toRestore = returnFocusRef.current;
     return () => {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      toRestore?.focus?.();
     };
   }, [open]);
 
@@ -201,6 +219,7 @@ function ConnectWithUs({
   const { mainLinks, iconLinks } = splitSocialLinksByGroup(links);
 
   function handleOpen() {
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
     setOpen(true);
     setHasOpened(true);
   }
@@ -252,7 +271,7 @@ function ConnectWithUs({
       <div
         onClick={() => setOpen(false)}
         aria-hidden="true"
-        className={`fixed inset-0 z-40 bg-[#0B1512]/55 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`fixed inset-0 z-40 touch-none bg-[#0B1512]/55 transition-opacity duration-300 ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       />
@@ -262,7 +281,11 @@ function ConnectWithUs({
         role="dialog"
         aria-modal="true"
         aria-label="Terhubung dengan Kami"
-        className={`fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85vh] w-full max-w-sm flex-col rounded-t-[28px] bg-white shadow-[0_-20px_60px_-15px_rgba(19,35,32,0.35)] transition-transform duration-[380ms] ease-out ${
+        aria-hidden={!open}
+        // inert: selagi tertutup (di luar layar) isinya tidak bisa
+        // difokus lewat Tab & tidak dibaca pembaca layar.
+        inert={!open}
+        className={`fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85dvh] w-full max-w-sm flex-col md:max-w-md rounded-t-[28px] bg-white shadow-[0_-20px_60px_-15px_rgba(19,35,32,0.35)] transition-transform duration-[380ms] ease-out ${
           open ? "translate-y-0" : "translate-y-full"
         }`}
       >
@@ -273,15 +296,16 @@ function ConnectWithUs({
         </div>
 
         <button
+          ref={closeBtnRef}
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Tutup"
-          className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#132320]/[0.06] text-[#132320]/50 transition hover:bg-[#132320]/10 active:scale-90"
+          className="absolute right-2.5 top-2 flex h-11 w-11 items-center justify-center rounded-full text-[#132320]/50 transition hover:bg-[#132320]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-90"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-6 pb-8 pt-1">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-1">
           {/* Header profil - foto sampul ala Linktree: pakai logo toko
               yang sama dengan di kartu utama, biar konsisten identitas
               (bukan foto sampul lebar - avatar bundar lebih pas untuk
@@ -549,6 +573,7 @@ export function FeedbackCard({ product }: { product: Product }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [sentAnonymously, setSentAnonymously] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasCover = Boolean(product.cover_image_url);
@@ -566,10 +591,34 @@ export function FeedbackCard({ product }: { product: Product }) {
     return () => URL.revokeObjectURL(url);
   }, [photoFile]);
 
+  // iOS Safari memulihkan halaman dari cache saat pelanggan menekan
+  // "Kembali" dari Google Maps - tanpa ini tombol tetap terkunci
+  // berputar karena state "reviewing" ikut dibekukan.
+  useEffect(() => {
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) setReviewing(false);
+    }
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
   async function handleSatisfied() {
-    await logPositiveClick(product.id);
+    // Kunci tombol: tap ganda tidak lagi mencatat klik berkali-kali
+    // (angka "Klik Review" di dashboard owner jadi lebih jujur).
+    if (reviewing) return;
+    setReviewing(true);
+
+    // Pencatatan klik dibatasi maks 1,2 detik - jaringan lambat tidak
+    // boleh menahan pelanggan yang cuma ingin menulis review.
+    await Promise.race([
+      logPositiveClick(product.id).catch(() => undefined),
+      new Promise((resolve) => setTimeout(resolve, 1200)),
+    ]);
+
     if (product.google_review_url) {
       window.location.href = product.google_review_url;
+    } else {
+      setReviewing(false);
     }
   }
 
@@ -647,11 +696,11 @@ export function FeedbackCard({ product }: { product: Product }) {
 
   return (
     <div
-      className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-500"
+      className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-500 motion-reduce:animate-none md:max-w-md"
       style={BODY}
     >
       <Card
-        className={`relative overflow-hidden border-black/[0.04] bg-white/95 shadow-[0_1px_2px_rgba(19,35,32,0.04),0_35px_70px_-25px_rgba(19,35,32,0.38)] backdrop-blur-xl ${
+        className={`relative overflow-hidden border-black/[0.04] bg-white shadow-[0_1px_2px_rgba(19,35,32,0.04),0_35px_70px_-25px_rgba(19,35,32,0.38)] ${
           hasCover ? "pb-0 pt-0" : "pb-0"
         }`}
       >
@@ -675,6 +724,8 @@ export function FeedbackCard({ product }: { product: Product }) {
               <img
                 src={product.cover_image_url ? cloudinaryThumbnail(product.cover_image_url, "f_auto,q_auto,w_800") : undefined}
                 alt=""
+                fetchPriority="high"
+                decoding="async"
                 className="absolute inset-0 h-full w-full object-cover"
                 style={{ objectPosition: product.cover_position || "50% 50%" }}
               />
@@ -727,13 +778,13 @@ export function FeedbackCard({ product }: { product: Product }) {
           {!hasCover && <BrandMarkGlow product={product} />}
 
           <p
-            className={`text-[9.5px] font-semibold uppercase tracking-[0.28em] text-[var(--brand)] ${eyebrowTopClass}`}
+            className={`text-[10px] font-semibold uppercase tracking-[0.26em] text-[var(--brand)] ${eyebrowTopClass}`}
             style={DISPLAY}
           >
             Terima kasih sudah berkunjung
           </p>
           <h1
-            className="mt-1.5 text-2xl font-bold leading-[1.15] tracking-tight text-[#132320]"
+            className="mt-1.5 max-w-full text-balance break-words text-2xl font-bold leading-[1.15] tracking-tight text-[#132320]"
             style={DISPLAY}
           >
             {product.business_name}
@@ -780,7 +831,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                     style={{ color: "var(--brand)" }}
                     strokeWidth={1.75}
                   />
-                  <span className="text-[10.5px] font-medium leading-tight text-[#132320]/65">
+                  <span className="text-[11px] font-medium leading-tight text-[#132320]/65">
                     {label}
                   </span>
                 </div>
@@ -796,6 +847,7 @@ export function FeedbackCard({ product }: { product: Product }) {
             <div className="space-y-3">
               <ActionCard
                 onClick={handleSatisfied}
+                busy={reviewing}
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
@@ -805,7 +857,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
                       <GoogleIcon className="h-3 w-3" />
                     </span>
-                    Tulis Review di Google Maps
+                    <span className="min-w-0 truncate">Tulis Review di Google Maps</span>
                   </>
                 }
               />
@@ -824,7 +876,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                     >
                       <ShieldCheck className="h-2.5 w-2.5" />
                     </span>
-                    Hubungi Owner / Customer Service
+                    <span className="min-w-0 truncate">Hubungi Owner / Customer Service</span>
                   </>
                 }
               />
@@ -864,7 +916,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Nama Anda"
-                        className="h-11 text-base"
+                        className="h-11 text-base md:text-base"
                       />
                     </div>
                   )}
@@ -877,7 +929,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                       value={complaintText}
                       onChange={(e) => setComplaintText(e.target.value)}
                       placeholder="Ceritakan pengalaman Anda..."
-                      className="text-base"
+                      className="text-base md:text-base"
                     />
                   </div>
 
@@ -1009,7 +1061,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           >
             Terima Kasih
           </p>
-          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[9px] font-semibold uppercase tracking-[0.24em] text-[#132320]/45">
+          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#132320]/55">
             <span className="h-px w-8 bg-[#132320]/15" />
             Atas dukungan Anda
             <span className="h-px w-8 bg-[#132320]/15" />
