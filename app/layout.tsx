@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, IBM_Plex_Mono, Manrope, Inter } from "next/font/google";
 import "./globals.css";
 
@@ -31,6 +31,16 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Smart Feedback & Review",
   description: "Sistem feedback & review pelanggan berbasis QR/NFC",
+};
+
+// Aplikasi ini hanya punya tema terang. Menyatakannya secara eksplisit
+// mencegah mode gelap otomatis di sebagian browser Android (Chrome
+// "Auto Dark", browser bawaan beberapa merek) membalik warna halaman
+// pelanggan jadi kacau. Ukuran layar tetap default (lebar perangkat).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "light",
 };
 
 export default function RootLayout({
