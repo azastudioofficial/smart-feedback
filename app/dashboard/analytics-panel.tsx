@@ -15,15 +15,26 @@ import {
   Percent,
   ArrowUpRight,
   ArrowDownRight,
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
   Lightbulb,
   Copy,
   Check,
+  Share2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useStore } from "./store-context";
 import {
+  AreaChart,
+  CountUp,
+  Funnel,
+  Heatmap,
+  Sparkline,
+} from "./analytics-charts";
+import {
   DAY_NAMES,
-  DAY_SHORT,
   buildInsights,
   buildShareText,
   computeAnalytics,
@@ -31,16 +42,25 @@ import {
   type AnalyticsResult,
   type ClickBucket,
   type Delta,
+  type Insight,
   type Period,
   type ScanBucket,
 } from "@/lib/analytics";
 
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
 
-// Shell kartu ini SAMA persis polanya (glass + shadow berlapis) dengan
-// kartu di halaman feedback pelanggan - lihat feedback-card.tsx.
-const CARD_SHELL =
-  "rounded-2xl border border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(19,35,32,0.03),0_20px_45px_-25px_rgba(19,35,32,0.25)] backdrop-blur-xl";
+// Kartu gaya SaaS: putih bersih, border tipis, bayangan halus berlapis.
+const CARD =
+  "rounded-2xl border border-black/[0.06] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_32px_-16px_rgba(16,24,40,0.12)]";
+
+// Masuk bertahap (stagger) saat panel muncul.
+function reveal(i: number, extra = "") {
+  return {
+    className:
+      `${extra} animate-in fade-in slide-in-from-bottom-2 duration-500 motion-reduce:animate-none`.trim(),
+    style: { animationDelay: `${i * 70}ms`, animationFillMode: "both" as const },
+  };
+}
 
 const PERIODS: Period[] = [7, 30, 90];
 
@@ -213,24 +233,54 @@ export function AnalyticsPanel({
     }
   }
 
-  return (
-    <div className="space-y-4">
-      {/* Bar atas: status live, pilih periode, bagikan */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-center gap-1.5 text-xs text-[#132320]/50">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              isLive ? "bg-[var(--brand)]" : "bg-black/20"
-            }`}
-          />
-          {isLive ? "Live - update otomatis" : "Menyambungkan..."}
-        </p>
+  const periodIndex = PERIODS.indexOf(period);
+  const rangeLabel = result
+    ? `${result.daily[0].label} - ${result.daily[result.daily.length - 1].label}`
+    : "";
 
+  return (
+    <div className="space-y-5">
+      {/* Header: rentang tanggal, status live, pilih periode */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[13px] text-[#132320]/55">
+            Performa kartu QR toko Anda
+            {rangeLabel && (
+              <>
+                {" "}
+                <span className="text-[#132320]/30">·</span>{" "}
+                <span className="font-medium text-[#132320]/70">
+                  {rangeLabel}
+                </span>
+              </>
+            )}
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-xs text-[#132320]/45">
+            <span className="relative flex h-2 w-2">
+              {isLive && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--brand)] opacity-50 motion-reduce:animate-none" />
+              )}
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${
+                  isLive ? "bg-[var(--brand)]" : "bg-black/20"
+                }`}
+              />
+            </span>
+            {isLive ? "Live - update otomatis" : "Menyambungkan..."}
+          </p>
+        </div>
+
+        {/* Segmented control dengan pil yang meluncur */}
         <div
           role="radiogroup"
           aria-label="Periode"
-          className="inline-flex rounded-xl bg-black/[0.05] p-1"
+          className="relative grid w-full max-w-[264px] grid-cols-3 rounded-xl bg-black/[0.05] p-1 sm:w-auto"
         >
+          <span
+            aria-hidden
+            className="absolute inset-y-1 left-1 w-[calc((100%-8px)/3)] rounded-lg bg-white shadow-[0_1px_3px_rgba(16,24,40,0.12)] transition-transform duration-300 ease-out motion-reduce:transition-none"
+            style={{ transform: `translateX(${periodIndex * 100}%)` }}
+          />
           {PERIODS.map((p) => (
             <button
               key={p}
@@ -238,10 +288,10 @@ export function AnalyticsPanel({
               role="radio"
               aria-checked={period === p}
               onClick={() => setPeriod(p)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              className={`relative z-10 px-4 py-1.5 text-xs font-semibold transition-colors ${
                 period === p
-                  ? "bg-white text-[#132320] shadow-sm"
-                  : "text-[#132320]/55 hover:text-[#132320]"
+                  ? "text-[#132320]"
+                  : "text-[#132320]/50 hover:text-[#132320]/80"
               }`}
             >
               {p} hari
@@ -264,140 +314,221 @@ export function AnalyticsPanel({
         <Skeleton />
       ) : (
         <>
-          {/* KPI */}
+          {/* KPI + sparkline */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard
-              icon={ScanLine}
-              label="Total Scan"
-              value={String(result.scans)}
-              delta={result.scansDelta}
-              tone="neutral"
-            />
-            <StatCard
-              icon={Star}
-              label="Klik Review Google"
-              value={String(result.clicks)}
-              delta={result.clicksDelta}
-              tone="brand"
-            />
-            <StatCard
-              icon={MessageCircle}
-              label="Pesan ke Owner / CS"
-              value={String(result.messages)}
-              delta={result.messagesDelta}
-              tone="rose"
-              upIsBad
-            />
-            <StatCard
-              icon={Percent}
-              label="Konversi ke Review"
-              value={`${result.conversion}%`}
-              deltaPts={result.conversionDeltaPts}
-              tone="brand"
-            />
-          </div>
-
-          {/* Insight otomatis */}
-          <div className={`${CARD_SHELL} p-5`}>
-            <div className="flex items-center gap-2">
-              <span
-                className="flex h-8 w-8 items-center justify-center rounded-lg"
-                style={{ background: "var(--brand-tint, #E4F1F1)", color: "var(--brand)" }}
-              >
-                <Lightbulb className="h-4 w-4" />
-              </span>
-              <h2 className="text-sm font-bold text-[#132320]" style={HEADING}>
-                Ringkasan untuk Anda
-              </h2>
+            <div {...reveal(0, "h-full")}>
+              <KpiCard
+                icon={ScanLine}
+                label="Total Scan"
+                value={result.scans}
+                delta={result.scansDelta}
+                period={result.period}
+                accent="#132320"
+                spark={result.daily.map((d) => d.scans)}
+              />
             </div>
-            <ul className="mt-3 space-y-2.5">
-              {insights.map((ins, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-[#132320]/75">
-                  <span
-                    className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{
-                      backgroundColor:
-                        ins.tone === "good"
-                          ? "#2E9E6B"
-                          : ins.tone === "warn"
-                            ? "#C7852B"
-                            : "rgba(19,35,32,0.3)",
-                    }}
-                  />
-                  {ins.text}
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-black/[0.06] pt-4">
-              <button
-                type="button"
-                onClick={shareWhatsApp}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-dark)]"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                Bagikan via WhatsApp
-              </button>
-              <button
-                type="button"
-                onClick={copySummary}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-black/[0.1] px-3.5 py-2 text-xs font-semibold text-[#132320]/70 transition hover:bg-black/[0.03]"
-              >
-                {copied ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-                {copied ? "Tersalin" : "Salin ringkasan"}
-              </button>
+            <div {...reveal(1, "h-full")}>
+              <KpiCard
+                icon={Star}
+                label="Klik Review Google"
+                value={result.clicks}
+                delta={result.clicksDelta}
+                period={result.period}
+                accent="var(--brand)"
+                spark={result.daily.map((d) => d.clicks)}
+                highlight
+              />
+            </div>
+            <div {...reveal(2, "h-full")}>
+              <KpiCard
+                icon={MessageCircle}
+                label="Pesan ke Owner / CS"
+                value={result.messages}
+                delta={result.messagesDelta}
+                period={result.period}
+                accent="#C4636B"
+                spark={result.daily.map((d) => d.messages)}
+                upIsBad
+              />
+            </div>
+            <div {...reveal(3, "h-full")}>
+              <KpiCard
+                icon={Percent}
+                label="Konversi ke Review"
+                value={result.conversion}
+                suffix="%"
+                deltaPts={result.conversionDeltaPts}
+                period={result.period}
+                accent="var(--brand)"
+                progress={result.conversion}
+              />
             </div>
           </div>
 
-          {/* Grafik harian */}
-          <div className={`${CARD_SHELL} p-5`}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-sm font-bold text-[#132320]" style={HEADING}>
-                Aktivitas Harian
-              </h2>
-              <div className="flex items-center gap-3 text-[11px] text-[#132320]/50">
+          {/* Grafik utama */}
+          <section {...reveal(4, `${CARD} p-5 sm:p-6`)}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-bold tracking-tight text-[#132320]" style={HEADING}>
+                  Aktivitas Harian
+                </h2>
+                <p className="mt-0.5 text-xs text-[#132320]/45">
+                  Sentuh atau arahkan kursor ke grafik untuk melihat detail per hari
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] font-medium text-[#132320]/55">
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-sm bg-[var(--brand)] opacity-30" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#132320]/40" />
                   Scan
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-sm bg-[var(--brand)]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--brand)]" />
                   Klik review
                 </span>
               </div>
             </div>
-            <DailyChart result={result} />
-          </div>
 
-          {/* Setelah scan, pelanggan ngapain? */}
-          <div className={`${CARD_SHELL} p-5`}>
-            <h2 className="text-sm font-bold text-[#132320]" style={HEADING}>
-              Setelah Scan, Pelanggan Melakukan Apa?
-            </h2>
-            <Breakdown result={result} />
-          </div>
+            {result.daily.every((d) => d.scans === 0 && d.clicks === 0) ? (
+              <EmptyState
+                title="Belum ada aktivitas"
+                text={`Belum ada scan dalam ${result.period} hari terakhir. Grafik akan muncul begitu pelanggan mulai scan kartu.`}
+              />
+            ) : (
+              <div className="mt-4">
+                <AreaChart daily={result.daily} />
+              </div>
+            )}
 
-          {/* Jam & hari ramai */}
-          <div className={`${CARD_SHELL} p-5`}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-sm font-bold text-[#132320]" style={HEADING}>
-                Jam &amp; Hari Paling Ramai
+            <dl className="mt-5 grid grid-cols-1 divide-y divide-black/[0.06] border-t border-black/[0.06] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <Fact
+                label="Rata-rata scan / hari"
+                value={result.scans > 0 ? String(result.avgPerDay).replace(".", ",") : "-"}
+              />
+              <Fact
+                label="Hari terbaik"
+                value={result.busiestDay ? result.busiestDay.label : "-"}
+                sub={result.busiestDay ? `${result.busiestDay.scans} scan` : undefined}
+              />
+              <Fact
+                label="Jam puncak"
+                value={
+                  result.peakWeekday !== null && result.peakHour !== null
+                    ? formatHourRange(result.peakHour).split("-")[0]
+                    : "-"
+                }
+                sub={
+                  result.peakWeekday !== null
+                    ? DAY_NAMES[result.peakWeekday]
+                    : "Butuh min. 10 scan"
+                }
+              />
+            </dl>
+          </section>
+
+          {/* Insight + corong */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section {...reveal(5, `${CARD} p-5 sm:p-6`)}>
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="flex h-8 w-8 items-center justify-center rounded-lg"
+                  style={{ background: "var(--brand-tint, #E4F1F1)", color: "var(--brand)" }}
+                >
+                  <Lightbulb className="h-4 w-4" />
+                </span>
+                <div>
+                  <h2 className="text-[15px] font-bold tracking-tight text-[#132320]" style={HEADING}>
+                    Insight untuk Anda
+                  </h2>
+                  <p className="text-xs text-[#132320]/45">Disusun otomatis dari data toko</p>
+                </div>
+              </div>
+              <ul className="mt-4 space-y-2.5">
+                {insights.map((ins, i) => (
+                  <InsightRow key={i} insight={ins} />
+                ))}
+              </ul>
+            </section>
+
+            <section {...reveal(6, `${CARD} p-5 sm:p-6`)}>
+              <h2 className="text-[15px] font-bold tracking-tight text-[#132320]" style={HEADING}>
+                Perjalanan Pelanggan
               </h2>
-              {result.hasPattern &&
-                result.peakWeekday !== null &&
-                result.peakHour !== null && (
-                  <p className="text-xs font-medium text-[var(--brand)]">
-                    Puncak: {DAY_NAMES[result.peakWeekday]},{" "}
-                    {formatHourRange(result.peakHour)}
-                  </p>
-                )}
-            </div>
-            <Heatmap result={result} />
+              <p className="mb-5 mt-0.5 text-xs text-[#132320]/45">
+                Apa yang dilakukan pelanggan setelah scan kartu
+              </p>
+              {result.breakdown.total === 0 ? (
+                <EmptyState title="Belum ada scan" text="Data perjalanan pelanggan muncul setelah ada scan pertama." compact />
+              ) : (
+                <Funnel result={result} />
+              )}
+            </section>
           </div>
+
+          {/* Peta panas */}
+          <section {...reveal(7, `${CARD} p-5 sm:p-6`)}>
+            <h2 className="text-[15px] font-bold tracking-tight text-[#132320]" style={HEADING}>
+              Jam &amp; Hari Paling Ramai
+            </h2>
+            <p className="mb-5 mt-0.5 text-xs text-[#132320]/45">
+              Kapan pelanggan paling sering scan kartu (WIB)
+            </p>
+            {result.hasPattern ? (
+              <Heatmap result={result} />
+            ) : (
+              <EmptyState
+                title="Pola belum terbentuk"
+                text="Peta jam ramai muncul setelah minimal 10 scan pada periode ini."
+                compact
+              />
+            )}
+          </section>
+
+          {/* Bagikan laporan */}
+          <section
+            className={reveal(8, "relative overflow-hidden rounded-2xl p-5 text-white sm:p-6").className}
+            style={{
+              background: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
+              ...reveal(8).style,
+            }}
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-14 right-16 h-32 w-32 rounded-full bg-white/[0.07]"
+            />
+            <div className="relative flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-[15px] font-bold" style={HEADING}>
+                  <Share2 className="h-4 w-4" />
+                  Bagikan laporan {result.period} hari
+                </p>
+                <p className="mt-1 text-xs text-white/75">
+                  Kirim ringkasan ini ke diri sendiri, tim, atau pemilik usaha lewat WhatsApp.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={shareWhatsApp}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-[#132320] shadow-sm transition hover:bg-white/90"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Kirim via WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={copySummary}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/35 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-white/10"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? "Tersalin" : "Salin ringkasan"}
+                </button>
+              </div>
+            </div>
+          </section>
 
           <p className="px-1 text-[11px] leading-relaxed text-[#132320]/40">
             Data scan &amp; klik review disimpan 90 hari, pesan pelanggan 30
@@ -415,14 +546,88 @@ export function AnalyticsPanel({
 
 function Skeleton() {
   return (
-    <div className="space-y-4" aria-hidden>
+    <div className="space-y-5" aria-hidden>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className={`${CARD_SHELL} h-[118px] animate-pulse`} />
+          <div key={i} className={`${CARD} h-[148px] animate-pulse`} />
         ))}
       </div>
-      <div className={`${CARD_SHELL} h-40 animate-pulse`} />
+      <div className={`${CARD} h-[330px] animate-pulse`} />
     </div>
+  );
+}
+
+function EmptyState({
+  title,
+  text,
+  compact = false,
+}: {
+  title: string;
+  text: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col items-center text-center ${compact ? "py-6" : "py-12"}`}>
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/[0.04] text-[#132320]/35">
+        <Activity className="h-5 w-5" />
+      </span>
+      <p className="mt-3 text-sm font-semibold text-[#132320]/70">{title}</p>
+      <p className="mt-1 max-w-xs text-xs leading-relaxed text-[#132320]/45">{text}</p>
+    </div>
+  );
+}
+
+function Fact({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="px-1 py-3 sm:px-5 sm:first:pl-0 sm:last:pr-0">
+      <dt className="text-[11px] font-medium text-[#132320]/45">{label}</dt>
+      <dd className="mt-0.5 flex items-baseline gap-1.5">
+        <span className="text-lg font-extrabold tabular-nums text-[#132320]" style={HEADING}>
+          {value}
+        </span>
+        {sub && <span className="text-[11px] text-[#132320]/45">{sub}</span>}
+      </dd>
+    </div>
+  );
+}
+
+const INSIGHT_STYLE: Record<
+  Insight["tone"],
+  { bg: string; fg: string; ring: string }
+> = {
+  good: { bg: "#E8F5EE", fg: "#1F7A4D", ring: "rgba(31,122,77,0.14)" },
+  warn: { bg: "#FDF3E7", fg: "#B45309", ring: "rgba(180,83,9,0.16)" },
+  info: { bg: "#F1F4F3", fg: "#4B5B57", ring: "rgba(19,35,32,0.08)" },
+};
+
+function InsightRow({ insight }: { insight: Insight }) {
+  const st = INSIGHT_STYLE[insight.tone];
+  const Icon =
+    insight.kind === "trend"
+      ? Activity
+      : insight.kind === "peak"
+        ? Clock
+        : insight.kind === "conversion"
+          ? Star
+          : insight.kind === "complaint"
+            ? insight.tone === "warn"
+              ? AlertCircle
+              : CheckCircle2
+            : Lightbulb;
+
+  return (
+    <li
+      className="flex items-start gap-3 rounded-xl p-3 text-[13px] leading-relaxed text-[#132320]/75"
+      style={{ backgroundColor: st.bg, boxShadow: `inset 0 0 0 1px ${st.ring}` }}
+    >
+      <span
+        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white"
+        style={{ color: st.fg }}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span>{insight.text}</span>
+    </li>
   );
 }
 
@@ -430,258 +635,112 @@ function DeltaChip({
   delta,
   pts,
   upIsBad = false,
+  period,
 }: {
   delta?: Delta;
   pts?: number | null;
   upIsBad?: boolean;
+  period: Period;
 }) {
   const value = pts !== undefined ? pts : delta?.pct ?? null;
-  if (value === null || value === 0) return null;
+
+  if (value === null) {
+    return <span className="text-[11px] text-[#132320]/30">Belum ada pembanding</span>;
+  }
+  if (value === 0) {
+    return <span className="text-[11px] text-[#132320]/45">Sama seperti {period} hari lalu</span>;
+  }
 
   const up = value > 0;
   const good = up !== upIsBad;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
-  const label =
-    pts !== undefined
-      ? `${Math.abs(value)} poin`
-      : `${Math.abs(value)}%`;
+  const label = pts !== undefined ? `${Math.abs(value)} poin` : `${Math.abs(value)}%`;
 
   return (
-    <span
-      className="mt-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-      style={{
-        color: good ? "#1F7A4D" : "#B5585E",
-        backgroundColor: good ? "#E8F5EE" : "#FCEEF0",
-      }}
-    >
-      <Icon className="h-3 w-3" />
-      {label}
+    <span className="flex items-center gap-1.5">
+      <span
+        className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
+        style={{
+          color: good ? "#1F7A4D" : "#B5585E",
+          backgroundColor: good ? "#E8F5EE" : "#FCEEF0",
+        }}
+      >
+        <Icon className="h-3 w-3" />
+        {label}
+      </span>
+      <span className="text-[11px] text-[#132320]/35">vs {period} hari lalu</span>
     </span>
   );
 }
 
-function StatCard({
+function KpiCard({
   icon: Icon,
   label,
   value,
+  suffix,
   delta,
   deltaPts,
   upIsBad,
-  tone,
+  period,
+  accent,
+  spark,
+  progress,
+  highlight = false,
 }: {
   icon: typeof ScanLine;
   label: string;
-  value: string;
+  value: number;
+  suffix?: string;
   delta?: Delta;
   deltaPts?: number | null;
   upIsBad?: boolean;
-  tone: "brand" | "rose" | "neutral";
+  period: Period;
+  accent: string;
+  spark?: number[];
+  progress?: number;
+  highlight?: boolean;
 }) {
-  const styles = {
-    brand: {
-      color: "var(--brand)",
-      bg: "linear-gradient(135deg, var(--brand), var(--brand-dark))",
-      iconColor: "#fff",
-    },
-    rose: { color: "#B5585E", bg: "#FCEEF0", iconColor: "#B5585E" },
-    neutral: { color: "#132320", bg: "#F6F8F7", iconColor: "#132320" },
-  }[tone];
-
   return (
-    <div className={`${CARD_SHELL} flex flex-col items-center p-4 text-center`}>
-      <span
-        className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
-        style={{ background: styles.bg, color: styles.iconColor }}
-      >
-        <Icon className="h-[18px] w-[18px]" />
-      </span>
-      <p className="mt-2.5 text-[11px] leading-tight text-[#132320]/50">{label}</p>
+    <div
+      className={`${CARD} group flex h-full flex-col p-4 transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(16,24,40,0.05),0_18px_40px_-16px_rgba(16,24,40,0.2)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5`}
+      style={highlight ? { boxShadow: "0 0 0 1.5px var(--brand), 0 14px 34px -16px var(--brand)" } : undefined}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+          style={{ backgroundColor: accent }}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <p className="min-w-0 text-[12px] font-medium leading-tight text-[#132320]/60">{label}</p>
+      </div>
+
       <p
-        className="mt-0.5 text-2xl font-extrabold"
-        style={{ color: styles.color, ...HEADING }}
+        className="mt-3 text-[28px] font-extrabold leading-none tracking-tight tabular-nums text-[#132320] sm:text-[32px]"
+        style={HEADING}
       >
-        {value}
+        <CountUp value={value} suffix={suffix} />
       </p>
-      <DeltaChip delta={delta} pts={deltaPts} upIsBad={upIsBad} />
-    </div>
-  );
-}
 
-function DailyChart({ result }: { result: AnalyticsResult }) {
-  const { daily, maxDaily, period } = result;
+      <div className="mt-2 min-h-[22px]">
+        <DeltaChip delta={delta} pts={deltaPts} upIsBad={upIsBad} period={period} />
+      </div>
 
-  if (maxDaily === 0) {
-    return (
-      <p className="py-10 text-center text-sm text-[#132320]/40">
-        Belum ada aktivitas pada {period} hari terakhir.
-      </p>
-    );
-  }
-
-  const pct = (n: number) => `${Math.max(n > 0 ? 3 : 0, (n / maxDaily) * 100)}%`;
-  const mid = daily[Math.floor(daily.length / 2)];
-
-  return (
-    <div className="mt-4">
-      <div className="flex">
-        {/* Sumbu Y sederhana */}
-        <div className="flex h-40 w-7 shrink-0 flex-col justify-between pr-1 text-right text-[10px] text-[#132320]/35">
-          <span>{maxDaily}</span>
-          <span>{Math.round(maxDaily / 2)}</span>
-          <span>0</span>
-        </div>
-
-        <div className="relative h-40 min-w-0 flex-1">
-          {/* Garis bantu */}
-          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
-            <div className="border-t border-dashed border-black/[0.07]" />
-            <div className="border-t border-dashed border-black/[0.07]" />
-            <div className="border-t border-black/[0.1]" />
-          </div>
-
-          <div className="relative flex h-full items-end gap-[2px]">
-            {daily.map((d) => (
+      <div className="mt-auto pt-3">
+        {spark && <Sparkline values={spark} color={accent} />}
+        {progress !== undefined && (
+          <div className="flex h-8 items-end">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-black/[0.06]">
               <div
-                key={d.dayIdx}
-                title={`${d.label}: ${d.scans} scan, ${d.clicks} klik review`}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-[1px]"
-              >
-                <div
-                  className="w-1/2 max-w-[10px] rounded-t-[2px] bg-[var(--brand)] opacity-30"
-                  style={{ height: pct(d.scans) }}
-                />
-                <div
-                  className="w-1/2 max-w-[10px] rounded-t-[2px] bg-[var(--brand)]"
-                  style={{ height: pct(d.clicks) }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="ml-7 mt-1.5 flex justify-between text-[10px] text-[#132320]/40">
-        <span>{daily[0].label}</span>
-        <span>{mid.label}</span>
-        <span>{daily[daily.length - 1].label}</span>
-      </div>
-    </div>
-  );
-}
-
-function Breakdown({ result }: { result: AnalyticsResult }) {
-  const { review, message, idle, total } = result.breakdown;
-
-  if (total === 0) {
-    return (
-      <p className="py-6 text-center text-sm text-[#132320]/40">
-        Belum ada scan pada periode ini.
-      </p>
-    );
-  }
-
-  const p = (n: number) => Math.round((n / total) * 100);
-  const rows = [
-    { label: "Membuka Google Review", n: review, color: "var(--brand)" },
-    { label: "Mengirim pesan ke owner / CS", n: message, color: "#B5585E" },
-    { label: "Hanya melihat halaman", n: idle, color: "rgba(19,35,32,0.18)" },
-  ];
-
-  return (
-    <div className="mt-4">
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-black/[0.05]">
-        {rows.map((r) =>
-          r.n > 0 ? (
-            <div
-              key={r.label}
-              style={{ width: `${(r.n / total) * 100}%`, backgroundColor: r.color }}
-              title={`${r.label}: ${r.n}`}
-            />
-          ) : null
-        )}
-      </div>
-
-      <ul className="mt-4 space-y-2">
-        {rows.map((r) => (
-          <li key={r.label} className="flex items-center gap-2.5 text-sm">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-sm"
-              style={{ backgroundColor: r.color }}
-            />
-            <span className="flex-1 text-[#132320]/70">{r.label}</span>
-            <span className="font-semibold text-[#132320]">{r.n}</span>
-            <span className="w-10 text-right text-xs text-[#132320]/45">
-              {p(r.n)}%
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Heatmap({ result }: { result: AnalyticsResult }) {
-  const { heat, maxHeat, hasPattern } = result;
-
-  if (!hasPattern) {
-    return (
-      <p className="py-6 text-center text-sm text-[#132320]/40">
-        Pola jam ramai muncul setelah minimal 10 scan pada periode ini.
-      </p>
-    );
-  }
-
-  return (
-    <div className="mt-4">
-      {/* Label jam */}
-      <div className="flex items-center gap-1">
-        <span className="w-8 shrink-0" />
-        <div className="grid flex-1 grid-cols-[repeat(24,minmax(0,1fr))] gap-[2px]">
-          {Array.from({ length: 24 }, (_, h) => (
-            <span
-              key={h}
-              className="text-center text-[9px] leading-none text-[#132320]/35"
-            >
-              {h % 6 === 0 ? String(h).padStart(2, "0") : ""}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-1 space-y-[2px]">
-        {heat.map((row, w) => (
-          <div key={w} className="flex items-center gap-1">
-            <span className="w-8 shrink-0 text-[10px] text-[#132320]/45">
-              {DAY_SHORT[w]}
-            </span>
-            <div className="grid flex-1 grid-cols-[repeat(24,minmax(0,1fr))] gap-[2px]">
-              {row.map((v, h) =>
-                v === 0 ? (
-                  <div
-                    key={h}
-                    className="aspect-square rounded-[3px] bg-black/[0.04]"
-                    title={`${DAY_NAMES[w]} ${formatHourRange(h)}: 0 scan`}
-                  />
-                ) : (
-                  <div
-                    key={h}
-                    className="aspect-square rounded-[3px] bg-[var(--brand)]"
-                    style={{ opacity: 0.2 + 0.8 * (v / maxHeat) }}
-                    title={`${DAY_NAMES[w]} ${formatHourRange(h)}: ${v} scan`}
-                  />
-                )
-              )}
+                className="h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none"
+                style={{
+                  width: `${Math.min(100, Math.max(progress > 0 ? 2 : 0, progress))}%`,
+                  background: "linear-gradient(90deg, var(--brand), var(--brand-dark))",
+                }}
+              />
             </div>
           </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-[#132320]/40">
-        Sedikit
-        <span className="h-2 w-2 rounded-[2px] bg-[var(--brand)] opacity-20" />
-        <span className="h-2 w-2 rounded-[2px] bg-[var(--brand)] opacity-50" />
-        <span className="h-2 w-2 rounded-[2px] bg-[var(--brand)]" />
-        Banyak
+        )}
       </div>
     </div>
   );
