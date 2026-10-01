@@ -1165,15 +1165,52 @@ export function FeedbackCard({ product }: { product: Product }) {
         {/* Footer ucapan terima kasih - tulisan tangan + gelombang lembut
             berwarna brand toko di dasar kartu. */}
         <div className="relative mt-auto overflow-hidden px-6 pb-10 pt-6 text-center">
+          {/* Gelombang berlapis: tiga lapis kurva halus dengan gradasi
+              warna brand (pekat di atas, memudar ke bawah) + garis
+              tipis di tepi atas lapisan belakang. Bukan satu blok
+              warna datar - kedalaman dari transparansi bertumpuk,
+              seperti latar halaman produk SaaS premium. Garis tepi
+              memakai non-scaling-stroke supaya tetap setipis 1px di
+              lebar layar berapa pun. */}
           <svg
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-20 w-full"
-            viewBox="0 0 100 24"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full"
+            viewBox="0 0 400 96"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
+            <defs>
+              <linearGradient id="fw-back" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" style={{ stopColor: "var(--brand)", stopOpacity: 0.16 }} />
+                <stop offset="1" style={{ stopColor: "var(--brand)", stopOpacity: 0.03 }} />
+              </linearGradient>
+              <linearGradient id="fw-mid" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.07 }} />
+                <stop offset="0.55" style={{ stopColor: "var(--brand)", stopOpacity: 0.12 }} />
+                <stop offset="1" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.08 }} />
+              </linearGradient>
+              <linearGradient id="fw-front" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.12 }} />
+                <stop offset="1" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.05 }} />
+              </linearGradient>
+            </defs>
             <path
-              d="M0,9 C18,1 34,17 54,9 C74,1 90,12 100,5 L100,24 L0,24 Z"
-              style={{ fill: "var(--brand)", fillOpacity: 0.06 }}
+              d="M0,40 C60,16 124,18 188,38 S308,66 400,30 L400,96 L0,96 Z"
+              fill="url(#fw-back)"
+            />
+            <path
+              d="M0,40 C60,16 124,18 188,38 S308,66 400,30"
+              fill="none"
+              strokeWidth="1"
+              vectorEffect="non-scaling-stroke"
+              style={{ stroke: "var(--brand)", strokeOpacity: 0.28 }}
+            />
+            <path
+              d="M0,60 C72,42 142,46 214,60 S334,78 400,54 L400,96 L0,96 Z"
+              fill="url(#fw-mid)"
+            />
+            <path
+              d="M0,78 C84,66 152,68 232,78 S342,90 400,74 L400,96 L0,96 Z"
+              fill="url(#fw-front)"
             />
           </svg>
 
