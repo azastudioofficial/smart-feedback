@@ -82,6 +82,7 @@ function ActionCard({
   ariaHaspopup,
   busy = false,
   variant = "secondary",
+  enterDelay = 0,
 }: {
   onClick: () => void;
   accent: string;
@@ -94,6 +95,8 @@ function ActionCard({
   busy?: boolean;
   /** primary = solid warna brand (aksi utama), secondary = putih bergaris. */
   variant?: "primary" | "secondary";
+  /** Jeda (ms) animasi muncul - dipakai untuk urutan muncul berjenjang. */
+  enterDelay?: number;
 }) {
   const primary = variant === "primary";
   // Warna teks di atas warna brand (putih, atau gelap kalau brand-nya
@@ -107,11 +110,12 @@ function ActionCard({
       disabled={busy}
       aria-busy={busy || undefined}
       aria-haspopup={ariaHaspopup}
-      className={`group relative block w-full overflow-hidden rounded-[20px] p-[18px] text-left transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+      className={`page-enter group relative block w-full overflow-hidden rounded-[20px] p-[18px] [-webkit-tap-highlight-color:transparent] text-left transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
         primary ? "" : "bg-white ring-1 ring-black/[0.07] hover:ring-black/[0.14]"
       }`}
-      style={
-        primary
+      style={{
+        animationDelay: `${enterDelay}ms`,
+        ...(primary
           ? {
               background: `linear-gradient(145deg, ${accent}, color-mix(in srgb, ${accent} 76%, black))`,
               boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), 0 20px 34px -20px color-mix(in srgb, ${accent} 85%, transparent)`,
@@ -119,10 +123,18 @@ function ActionCard({
           : {
               boxShadow:
                 "0 1px 2px rgba(19,35,32,0.04), 0 14px 26px -22px rgba(19,35,32,0.4)",
-            }
-      }
+            }),
+      }}
     >
-      <span className="flex items-start gap-3.5">
+      {/* Kilau lembut di pojok kanan atas kartu utama - memberi kesan
+          permukaan bercahaya, bukan blok warna datar. */}
+      {primary && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -top-14 h-40 w-40 rounded-full bg-white/[0.16] blur-2xl"
+        />
+      )}
+      <span className="relative flex items-start gap-3.5">
         <span
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
           style={
@@ -165,7 +177,7 @@ function ActionCard({
       {/* Baris bawah: label aksi di kiri, tombol panah di kanan, dipisah
           garis tipis dari teks di atasnya. */}
       <span
-        className="mt-4 flex w-full items-center gap-2 border-t pt-3 text-[12px] font-medium"
+        className="relative mt-4 flex w-full items-center gap-2 border-t pt-3 text-[12px] font-medium"
         style={{
           color: primary ? onBrand : "rgba(19,35,32,0.75)",
           borderColor: primary
@@ -280,7 +292,8 @@ function ConnectWithUs({
         type="button"
         onClick={handleOpen}
         aria-haspopup="dialog"
-        className="group mt-3.5 flex w-full items-center gap-3.5 rounded-[18px] bg-[#F6F8F7] px-4 py-3 text-left ring-1 ring-black/[0.05] transition-all duration-300 hover:bg-white hover:ring-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.99] motion-reduce:transition-none"
+        style={{ animationDelay: "280ms" }}
+        className="page-enter group mt-3.5 flex w-full items-center gap-3.5 rounded-[18px] bg-[#F6F8F7] [-webkit-tap-highlight-color:transparent] px-4 py-3 text-left ring-1 ring-black/[0.05] transition-all duration-300 hover:bg-white hover:ring-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.99] motion-reduce:transition-none"
       >
         <span className="flex shrink-0 -space-x-2" aria-hidden="true">
           {[...mainLinks, ...iconLinks].slice(0, 4).map((l) => {
@@ -863,10 +876,10 @@ export function FeedbackCard({ product }: { product: Product }) {
             />
           )}
 
-          <p className="mt-5 text-[15px] font-semibold text-[#132320]">
+          <p className="mt-6 text-[17px] font-semibold tracking-[-0.015em] text-[#132320]">
             Bagaimana pengalaman Anda hari ini?
           </p>
-          <p className="mx-auto mt-1.5 max-w-[260px] text-[12px] leading-relaxed text-[#132320]/55">
+          <p className="mx-auto mt-1.5 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/55">
             Kami selalu ingin memberikan yang terbaik untuk Anda.
           </p>
 
@@ -909,6 +922,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                 onClick={handleSatisfied}
                 busy={reviewing}
                 variant="primary"
+                enterDelay={120}
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
@@ -925,6 +939,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
               <ActionCard
                 onClick={() => setStep("form")}
+                enterDelay={200}
                 accent="#2F7D5B"
                 icon={<MessageSquareCheck className="h-6 w-6" />}
                 title="Hubungi Layanan Pelanggan"
@@ -947,8 +962,10 @@ export function FeedbackCard({ product }: { product: Product }) {
           {step === "form" && (
             <div className="space-y-5 border-t border-black/[0.06] pt-5">
               {sentAnonymously ? (
-                <div className="flex flex-col items-center gap-2 rounded-2xl bg-[#F6F8F7] px-5 py-8 text-center">
-                  <CheckCircle2 className="h-9 w-9 text-[var(--brand)]" />
+                <div className="flex flex-col items-center gap-2 rounded-2xl bg-[#F6F8F7] px-5 py-9 text-center">
+                  <span className="mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_8px_20px_-10px_rgba(19,35,32,0.35)] ring-1 ring-black/[0.05]">
+                    <CheckCircle2 className="h-7 w-7 text-[var(--brand)]" />
+                  </span>
                   <p className="font-semibold text-[#132320]">
                     Terima kasih atas masukan Anda
                   </p>
@@ -969,6 +986,29 @@ export function FeedbackCard({ product }: { product: Product }) {
                     Kembali
                   </button>
 
+                  {/* Judul langkah - mengulang nama kartu yang baru
+                      diketuk, supaya pelanggan tidak kehilangan konteks. */}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px]"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, #2F7D5B 12%, white)",
+                        color: "#2F7D5B",
+                        boxShadow: "inset 0 0 0 1px color-mix(in srgb, #2F7D5B 14%, white)",
+                      }}
+                    >
+                      <MessageSquareCheck className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#132320]">
+                        Hubungi Layanan Pelanggan
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-[#132320]/55">
+                        Dapatkan Bantuan Cepat atau Solusi Masalah.
+                      </p>
+                    </div>
+                  </div>
+
                   {!anonymous && (
                     <div className="space-y-1.5">
                       <Label htmlFor="customerName">Nama (Opsional)</Label>
@@ -977,7 +1017,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         placeholder="Nama Anda"
-                        className="h-11 text-base md:text-base"
+                        className="h-12 rounded-xl! border-black/[0.08]! bg-[#F6F8F7]! px-3.5 shadow-none placeholder:text-[#132320]/35 focus-visible:border-[var(--brand)]! focus-visible:bg-white! focus-visible:ring-[var(--brand)]/15! text-base md:text-base"
                       />
                     </div>
                   )}
@@ -990,7 +1030,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                       value={complaintText}
                       onChange={(e) => setComplaintText(e.target.value)}
                       placeholder="Ceritakan pengalaman Anda..."
-                      className="text-base md:text-base"
+                      className="min-h-28 py-3 rounded-xl! border-black/[0.08]! bg-[#F6F8F7]! px-3.5 shadow-none placeholder:text-[#132320]/35 focus-visible:border-[var(--brand)]! focus-visible:bg-white! focus-visible:ring-[var(--brand)]/15! text-base md:text-base"
                     />
                   </div>
 
@@ -1019,10 +1059,12 @@ export function FeedbackCard({ product }: { product: Product }) {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex min-h-11 w-full items-center gap-3 rounded-xl border border-dashed border-black/[0.14] px-3.5 py-3 text-left transition hover:border-[var(--brand)]/40 hover:bg-[var(--brand)]/[0.03]"
+                        className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-dashed border-black/[0.16] bg-white px-3 py-2.5 text-left transition hover:border-[var(--brand)]/45 hover:bg-[var(--brand)]/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                       >
-                        <ImagePlus className="h-4 w-4 shrink-0 text-[#132320]/40" />
-                        <span className="text-xs text-[#132320]/50">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F6F8F7] text-[#132320]/45">
+                          <ImagePlus className="h-4 w-4" />
+                        </span>
+                        <span className="text-[13px] text-[#132320]/55">
                           Ketuk untuk pilih foto
                         </span>
                       </button>
@@ -1038,32 +1080,46 @@ export function FeedbackCard({ product }: { product: Product }) {
                     />
                   </div>
 
-                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-black/[0.07] bg-[#F6F8F7] px-3.5 py-3">
+                  <label className="flex cursor-pointer items-center gap-3.5 rounded-2xl bg-[#F6F8F7] px-4 py-3.5 ring-1 ring-black/[0.05] transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--brand)]">
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-[13px] font-medium text-[#132320]">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Kirim sebagai anonim
+                      </span>
+                      <span className="mt-1 block text-[12px] leading-relaxed text-[#132320]/55">
+                        Nama disembunyikan, laporan langsung masuk ke dashboard
+                        pemilik toko tanpa lewat WhatsApp.
+                      </span>
+                    </span>
                     <input
                       type="checkbox"
+                      role="switch"
                       checked={anonymous}
                       onChange={(e) => {
                         setAnonymous(e.target.checked);
                         if (e.target.checked) setCustomerName("");
                       }}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)]"
+                      className="peer sr-only"
                     />
-                    <span className="text-xs leading-relaxed text-[#132320]/70">
-                      <span className="mb-0.5 flex items-center gap-1 font-medium text-[#132320]">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        Kirim sebagai anonim
-                      </span>
-                      Nama disembunyikan, laporan langsung masuk ke dashboard
-                      pemilik toko tanpa lewat WhatsApp.
-                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="relative h-6 w-10 shrink-0 rounded-full bg-[#132320]/15 transition-colors duration-200 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:duration-200 peer-checked:bg-[var(--brand)] peer-checked:after:translate-x-4 motion-reduce:transition-none motion-reduce:after:transition-none"
+                    />
                   </label>
 
-                  {error && <p className="text-sm text-[#B5585E]">{error}</p>}
+                  {error && (
+                    <p
+                      role="alert"
+                      className="rounded-xl bg-[#FCEEF0] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#B5585E]"
+                    >
+                      {error}
+                    </p>
+                  )}
 
                   <Button
                     onClick={handleSubmitComplaint}
                     disabled={loading}
-                    className="relative h-12 w-full overflow-hidden rounded-xl bg-[#132320] text-[15px] font-semibold text-white shadow-[0_10px_25px_-10px_rgba(19,35,32,0.5)] hover:bg-[#0B1512]"
+                    className="relative h-[52px] w-full overflow-hidden rounded-2xl bg-[#132320] text-[15px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_16px_30px_-14px_rgba(19,35,32,0.65)] transition active:scale-[0.99] hover:bg-[#0B1512]"
                   >
                     {loading && (
                       <span
@@ -1071,7 +1127,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                         style={{ width: `${progress}%` }}
                       />
                     )}
-                    <span className="relative flex items-center gap-2">
+                    <span className="relative flex items-center gap-2 tabular-nums">
                       {loading ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1108,16 +1164,12 @@ export function FeedbackCard({ product }: { product: Product }) {
           >
             <path
               d="M0,9 C18,1 34,17 54,9 C74,1 90,12 100,5 L100,24 L0,24 Z"
-              style={{ fill: "var(--brand)", fillOpacity: 0.07 }}
-            />
-            <path
-              d="M0,15 C24,8 44,22 68,14 C84,9 94,14 100,11 L100,24 L0,24 Z"
-              style={{ fill: "var(--brand)", fillOpacity: 0.11 }}
+              style={{ fill: "var(--brand)", fillOpacity: 0.06 }}
             />
           </svg>
 
           <p
-            className={`${script.className} relative text-[32px] leading-none`}
+            className={`${script.className} relative text-[28px] leading-none`}
             style={{ color: "var(--brand-dark)" }}
           >
             Terima Kasih
