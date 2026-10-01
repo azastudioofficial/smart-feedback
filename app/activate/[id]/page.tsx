@@ -24,11 +24,14 @@ function StatusScreen({
   tone,
   title,
   message,
+  cardId,
 }: {
   icon: typeof Ban;
   tone: "rose" | "brand" | "amber";
   title: string;
   message: string;
+  /** ID Kartu (short_code) - ditampilkan supaya gampang disebutkan ke admin. */
+  cardId?: string;
 }) {
   const toneClasses = {
     rose: "bg-[#FCEEF0] text-[#B5585E]",
@@ -52,6 +55,17 @@ function StatusScreen({
           <p className="mt-2 text-sm leading-relaxed text-[#132320]/55">
             {message}
           </p>
+          {cardId && (
+            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-black/[0.04] px-3 py-1.5 text-[11px] text-[#132320]/55">
+              ID Kartu
+              <span
+                className="select-all font-bold tracking-wide text-[#132320]/80"
+                style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+              >
+                {cardId}
+              </span>
+            </p>
+          )}
         </CardContent>
       </Card>
     </main>
@@ -64,7 +78,7 @@ export default async function ActivatePage({ params }: Props) {
 
   const { data: product, error } = await supabase
     .from("products")
-    .select("id, is_active, is_suspended, pending_review, plan")
+    .select("id, short_code, is_active, is_suspended, pending_review, plan")
     .eq("id", id)
     .maybeSingle();
 
@@ -98,6 +112,7 @@ export default async function ActivatePage({ params }: Props) {
         tone="amber"
         title="Menunggu Persetujuan"
         message="Permohonan aktivasi untuk QR/NFC ini sudah terkirim dan sedang ditinjau. Silakan cek kembali beberapa saat lagi."
+        cardId={product.short_code}
       />
     );
   }
@@ -116,7 +131,11 @@ export default async function ActivatePage({ params }: Props) {
         } as CSSProperties
       }
     >
-      <ActivateForm productId={product.id} isPro={product.plan === "pro"} />
+      <ActivateForm
+        productId={product.id}
+        shortCode={product.short_code}
+        isPro={product.plan === "pro"}
+      />
     </main>
   );
 }
