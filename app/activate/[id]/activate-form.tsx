@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Pencil,
+  QrCode,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,6 +115,25 @@ function Stepper({ current }: { current: number }) {
   );
 }
 
+// ID Kartu = kode pendek di URL QR (sama dengan kolom "ID Kartu" di panel
+// admin). Ditampilkan di semua langkah supaya pelanggan bisa menyebutkannya
+// ke penyedia layanan kalau perlu bantuan, dan admin langsung tahu kartu
+// yang mana. Teks bisa di-select penuh dengan satu ketukan.
+function CardIdBadge({ code }: { code: string }) {
+  return (
+    <p className="inline-flex items-center gap-1.5 rounded-full bg-black/[0.04] py-1.5 pl-2.5 pr-3 text-[11px] text-[#132320]/55">
+      <QrCode className="h-3.5 w-3.5 text-[#132320]/40" aria-hidden />
+      ID Kartu
+      <span
+        className="select-all font-bold tracking-wide text-[#132320]/80"
+        style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+      >
+        {code}
+      </span>
+    </p>
+  );
+}
+
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return <p className="text-xs text-[#B5585E]">{message}</p>;
@@ -121,9 +141,12 @@ function FieldError({ message }: { message?: string }) {
 
 export function ActivateForm({
   productId,
+  shortCode,
   isPro,
 }: {
   productId: string;
+  /** ID Kartu (short_code) - hanya untuk ditampilkan. */
+  shortCode: string;
   // Basic: pelanggan langsung di-redirect ke Google Review, tidak ada
   // alur keluhan sama sekali - jadi WhatsApp owner (dipakai buat
   // terusin keluhan pelanggan) tidak perlu ditanya di awal.
@@ -284,6 +307,9 @@ export function ActivateForm({
               login ke dashboard memakai email &amp; password yang baru saja
               didaftarkan.
             </p>
+            <div className="mt-4">
+              <CardIdBadge code={shortCode} />
+            </div>
             <p className="mt-4 flex items-center gap-1.5 text-xs text-[#132320]/40">
               <Loader2 className="h-3 w-3 animate-spin" />
               Tetap di halaman ini - begitu disetujui, halaman feedback
@@ -304,7 +330,10 @@ export function ActivateForm({
     >
       <Card className="overflow-hidden shadow-[0_25px_60px_-20px_rgba(19,35,32,0.28)]">
         <CardHeader className="flex flex-col items-center px-6 pt-7 text-center sm:px-8">
-          <Stepper current={step} />
+          <CardIdBadge code={shortCode} />
+          <div className="mt-4">
+            <Stepper current={step} />
+          </div>
           <p
             className="mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--brand)]"
             style={DISPLAY}
