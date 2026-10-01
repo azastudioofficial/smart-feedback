@@ -926,7 +926,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
-                description="Bantu Bisnis Kami Berkembang dengan ulasan di Google Maps."
+                description="Bantu bisnis kami berkembang dengan ulasan di Google Maps."
                 chip={
                   <>
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
