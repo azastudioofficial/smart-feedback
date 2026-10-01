@@ -1,7 +1,8 @@
 // app/feedback/[id]/page.tsx
 
 import { notFound, redirect } from "next/navigation";
-import type { CSSProperties } from "react";
+import { cache, type CSSProperties } from "react";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Ban, Settings } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -30,15 +31,43 @@ function onBrandColor(hex: string): string {
   return L > 0.3 ? "#132320" : "#ffffff";
 }
 
-export default async function FeedbackPage({ params }: Props) {
-  const { id } = await params;
+// Dibungkus cache(): generateMetadata, generateViewport, dan halaman di
+// bawah ini memanggil fungsi yang sama dalam satu request, tapi Supabase
+// hanya ditanya SEKALI.
+const getProduct = cache(async (id: string) => {
   const supabase = createServiceClient();
-
-  const { data: product, error } = await supabase
+  return supabase
     .from("products")
     .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, social_links, is_active, is_suspended, plan")
     .eq("id", id)
     .maybeSingle();
+});
+
+// Judul tab = nama toko (bukan nama aplikasi), dan halaman ini tidak perlu
+// muncul di hasil pencarian Google - ini halaman pelanggan sekali pakai.
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const { data: product } = await getProduct(id);
+  return {
+    title: product?.business_name ? `${product.business_name} · Feedback` : "Feedback",
+    robots: { index: false, follow: false },
+  };
+}
+
+// Bilah alamat browser di HP ikut warna brand toko - terasa seperti
+// aplikasi sendiri, bukan halaman web biasa.
+export async function generateViewport({ params }: Props): Promise<Viewport> {
+  const { id } = await params;
+  const { data: product } = await getProduct(id);
+  const c = product?.brand_color;
+  return {
+    themeColor: c && /^#[0-9a-f]{6}$/i.test(c) ? c : undefined,
+  };
+}
+
+export default async function FeedbackPage({ params }: Props) {
+  const { id } = await params;
+  const { data: product, error } = await getProduct(id);
 
   if (error || !product) {
     notFound();
@@ -58,7 +87,7 @@ export default async function FeedbackPage({ params }: Props) {
             <h1 className="mt-4 text-xl font-bold text-[#132320]">
               Layanan Ditangguhkan
             </h1>
-            <p className="mt-2 text-sm leading-relaxed text-[#132320]/55">
+            <p className="mt-2 text-sm leading-relaxed text-[#132320]/68">
               Mohon maaf, layanan feedback untuk toko ini sedang tidak aktif.
             </p>
           </CardContent>
