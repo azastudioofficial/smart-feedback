@@ -13,6 +13,23 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+// Warna teks yang terbaca di atas warna brand: putih untuk brand gelap/
+// sedang, gelap untuk brand yang terang (mis. kuning).
+function onBrandColor(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const L =
+    0.2126 * lin((n >> 16) & 255) +
+    0.7152 * lin((n >> 8) & 255) +
+    0.0722 * lin(n & 255);
+  return L > 0.3 ? "#132320" : "#ffffff";
+}
+
 export default async function FeedbackPage({ params }: Props) {
   const { id } = await params;
   const supabase = createServiceClient();
@@ -79,6 +96,7 @@ export default async function FeedbackPage({ params }: Props) {
           "--brand": brandColor,
           "--brand-dark": brandDark,
           "--brand-tint": brandTint,
+          "--on-brand": onBrandColor(brandColor),
         } as CSSProperties
       }
     >
@@ -103,15 +121,6 @@ export default async function FeedbackPage({ params }: Props) {
       <div
         className="pointer-events-none absolute -bottom-32 -right-20 hidden h-96 w-96 rounded-full blur-3xl sm:block"
         style={{ backgroundColor: brandDark, opacity: 0.12 }}
-      />
-
-      {/* Glow lembut tepat di belakang kartu, biar kartunya "nyala" /
-          jadi pusat perhatian - bukan cuma numpuk di background polos. */}
-      <div
-        className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl sm:block"
-        style={{
-          background: `radial-gradient(circle, ${brandTint} 0%, transparent 70%)`,
-        }}
       />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full justify-center sm:min-h-0 sm:w-auto">
