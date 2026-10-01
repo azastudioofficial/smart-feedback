@@ -31,8 +31,8 @@ import {
   Store,
   Star,
   ArrowRight,
-  Share2,
-  BookOpen,
+  ChevronRight,
+  ArrowUpRight,
   Heart,
 } from "lucide-react";
 import {
@@ -81,6 +81,7 @@ function ActionCard({
   chip,
   ariaHaspopup,
   busy = false,
+  variant = "secondary",
 }: {
   onClick: () => void;
   accent: string;
@@ -91,7 +92,14 @@ function ActionCard({
   ariaHaspopup?: "dialog";
   /** true = sedang memproses (tombol dikunci + panah jadi spinner). */
   busy?: boolean;
+  /** primary = solid warna brand (aksi utama), secondary = putih bergaris. */
+  variant?: "primary" | "secondary";
 }) {
+  const primary = variant === "primary";
+  // Warna teks di atas warna brand (putih, atau gelap kalau brand-nya
+  // terang) - dihitung di page.tsx supaya selalu terbaca.
+  const onBrand = "var(--on-brand, #ffffff)";
+
   return (
     <button
       type="button"
@@ -99,56 +107,85 @@ function ActionCard({
       disabled={busy}
       aria-busy={busy || undefined}
       aria-haspopup={ariaHaspopup}
-      // bg/ring di className = cadangan kalau browser lama menolak
-      // color-mix() di style di bawah (style yang valid tetap menang).
-      className="group relative block w-full rounded-[22px] bg-[#F6F8F7] p-4 text-left ring-1 ring-black/[0.06] transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.985] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-      style={{
-        background: `linear-gradient(135deg, color-mix(in srgb, ${accent} 11%, white), color-mix(in srgb, ${accent} 3%, white) 70%)`,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 16%, white), 0 10px 24px -16px color-mix(in srgb, ${accent} 55%, transparent)`,
-      }}
+      className={`group relative block w-full overflow-hidden rounded-[20px] p-[18px] text-left transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+        primary ? "" : "bg-white ring-1 ring-black/[0.07] hover:ring-black/[0.14]"
+      }`}
+      style={
+        primary
+          ? {
+              background: `linear-gradient(145deg, ${accent}, color-mix(in srgb, ${accent} 76%, black))`,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.2), 0 20px 34px -20px color-mix(in srgb, ${accent} 85%, transparent)`,
+            }
+          : {
+              boxShadow:
+                "0 1px 2px rgba(19,35,32,0.04), 0 14px 26px -22px rgba(19,35,32,0.4)",
+            }
+      }
     >
-      {/* Baris atas: ikon + judul + deskripsi memakai SELURUH lebar sisa
-          (tanpa tombol panah di sampingnya), jadi judul muat 1 baris dan
-          teks tidak sempit. */}
       <span className="flex items-start gap-3.5">
         <span
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
-          style={{
-            backgroundColor: `color-mix(in srgb, ${accent} 17%, white)`,
-            color: accent,
-            boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 14%, white)`,
-          }}
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
+          style={
+            primary
+              ? {
+                  backgroundColor: `color-mix(in srgb, ${onBrand} 16%, transparent)`,
+                  color: onBrand,
+                  boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${onBrand} 22%, transparent)`,
+                }
+              : {
+                  backgroundColor: `color-mix(in srgb, ${accent} 11%, white)`,
+                  color: accent,
+                  boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${accent} 14%, white)`,
+                }
+          }
         >
           {icon}
         </span>
 
         <span className="min-w-0 flex-1 pt-0.5">
-          <span className="block text-[14px] font-semibold leading-snug text-[#132320]">
+          <span
+            className="block text-[15px] font-semibold leading-snug tracking-[-0.01em]"
+            style={{ color: primary ? onBrand : "#132320" }}
+          >
             {title}
           </span>
-          <span className="mt-1 block text-[12px] leading-relaxed text-[#132320]/65">
+          <span
+            className="mt-1 block text-[12.5px] leading-relaxed"
+            style={{
+              color: primary
+                ? `color-mix(in srgb, ${onBrand} 82%, transparent)`
+                : "rgba(19,35,32,0.62)",
+            }}
+          >
             {description}
           </span>
         </span>
       </span>
 
-      {/* Baris bawah: strip aksi selebar kartu - label di kiri, panah di
-          kanan. Lebar penuh berarti label tidak lagi terpotong "...". */}
+      {/* Baris bawah: label aksi di kiri, tombol panah di kanan, dipisah
+          garis tipis dari teks di atasnya. */}
       <span
-        className="mt-3.5 flex w-full items-center gap-2 rounded-full bg-black/[0.04] py-1.5 pl-2 pr-1.5 text-[11px] font-medium text-[#132320]/75"
+        className="mt-4 flex w-full items-center gap-2 border-t pt-3 text-[12px] font-medium"
         style={{
-          backgroundColor: `color-mix(in srgb, ${accent} 11%, white)`,
+          color: primary ? onBrand : "rgba(19,35,32,0.75)",
+          borderColor: primary
+            ? `color-mix(in srgb, ${onBrand} 22%, transparent)`
+            : "rgba(19,35,32,0.07)",
         }}
       >
         {chip}
         <span
-          className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
-          style={{ backgroundColor: accent }}
+          className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
+          style={
+            primary
+              ? { backgroundColor: onBrand, color: "var(--brand)" }
+              : { backgroundColor: accent, color: "#ffffff" }
+          }
         >
           {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-4 w-4" />
           )}
         </span>
       </span>
@@ -233,46 +270,47 @@ function ConnectWithUs({
 
   return (
     <>
-      {/* Tombol pemicu - sekarang kartu aksi ke-3, setara dengan
-          "Tulis Review" & "Laporkan Masalah". Judul & chip mengikuti
-          tautan yang BENAR-BENAR diisi owner (bukan teks tetap), supaya
-          tidak menjanjikan "Menu" kalau toko cuma punya Instagram. */}
-      <div className="mt-3.5">
-        <ActionCard
-          onClick={handleOpen}
-          ariaHaspopup="dialog"
-          accent="#5B5F97"
-          icon={
-            mainLinks.length > 0 ? (
-              <BookOpen className="h-6 w-6" />
-            ) : (
-              <Share2 className="h-6 w-6" />
-            )
-          }
-          title={mainLinks.length > 0 ? "Lihat Menu & Katalog" : "Ikuti Kami"}
-          description={
-            mainLinks.length > 0
-              ? "Jelajahi menu, produk, dan promo menarik kami."
-              : "Temukan kami di media sosial untuk info dan promo terbaru."
-          }
-          chip={
-            <>
+      {/* Tombol pemicu - sengaja BARIS RAMPING (bukan kartu besar ketiga)
+          supaya hirarkinya jelas: 2 aksi utama di atas, ini pelengkap.
+          Tumpukan ikon platform memberi bocoran isi sheet. Hanya ikon
+          bawaan (bukan ikon custom) agar gambar custom tetap dimuat
+          malas, baru setelah sheet dibuka. Judul & deskripsi mengikuti
+          tautan yang BENAR-BENAR diisi owner. */}
+      <button
+        type="button"
+        onClick={handleOpen}
+        aria-haspopup="dialog"
+        className="group mt-3.5 flex w-full items-center gap-3.5 rounded-[18px] bg-[#F6F8F7] px-4 py-3 text-left ring-1 ring-black/[0.05] transition-all duration-300 hover:bg-white hover:ring-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.99] motion-reduce:transition-none"
+      >
+        <span className="flex shrink-0 -space-x-2" aria-hidden="true">
+          {[...mainLinks, ...iconLinks].slice(0, 4).map((l) => {
+            const meta = SOCIAL_PLATFORM_META[l.platform];
+            const Icon = meta.icon;
+            return (
               <span
-                className="flex h-5 w-5 items-center justify-center rounded-full text-white"
-                style={{ backgroundColor: "#5B5F97" }}
+                key={l.id}
+                className="flex h-9 w-9 items-center justify-center rounded-full ring-2 ring-[#F6F8F7] transition-all duration-300 group-hover:ring-white"
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${meta.color} 14%, white)`,
+                }}
               >
-                <Share2 className="h-2.5 w-2.5" />
+                <Icon className="h-4 w-4" style={{ color: meta.color }} />
               </span>
-              <span className="min-w-0 truncate">
-                {[...mainLinks, ...iconLinks]
-                  .slice(0, 3)
-                  .map((l) => socialLinkDisplayLabel(l))
-                  .join(" · ")}
-              </span>
-            </>
-          }
-        />
-      </div>
+            );
+          })}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-semibold text-[#132320]">
+            {mainLinks.length > 0 ? "Lihat Menu & Katalog" : "Ikuti Kami"}
+          </span>
+          <span className="mt-0.5 block truncate text-[12px] text-[#132320]/55">
+            {mainLinks.length > 0
+              ? "Jelajahi menu, produk, dan promo menarik kami."
+              : "Temukan kami di media sosial untuk info dan promo terbaru."}
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-[#132320]/30 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-[#132320]/60 motion-reduce:transition-none" />
+      </button>
 
       {/* Backdrop gelap di belakang sheet - tap di sini juga menutup */}
       <div
@@ -289,6 +327,10 @@ function ConnectWithUs({
         aria-modal="true"
         aria-label="Terhubung dengan Kami"
         aria-hidden={!open}
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, color-mix(in srgb, var(--brand) 9%, white), white 200px)",
+        }}
         // inert: selagi tertutup (di luar layar) isinya tidak bisa
         // difokus lewat Tab & tidak dibaca pembaca layar.
         inert={!open}
@@ -401,6 +443,7 @@ function ConnectWithUs({
                       <span className="line-clamp-1 px-14 text-[13px] font-semibold text-[#132320] transition-colors group-hover:text-[var(--brand-dark)]">
                         {socialLinkDisplayLabel(link)}
                       </span>
+                      <ArrowUpRight className="absolute right-4 h-4 w-4 text-[#132320]/25 transition-colors group-hover:text-[var(--brand-dark)]" />
                     </a>
                   );
                 })}
@@ -477,6 +520,11 @@ function ConnectWithUs({
 // yang lebih netral & lebih gampang dibaca di ukuran kecil.
 const BODY = { fontFamily: "var(--font-admin-body)" };
 const DISPLAY = { fontFamily: "var(--font-display)" };
+
+// Baris "Pelayanan Terbaik / Kualitas Terjamin / Kepuasan Pelanggan".
+// Dimatikan karena itu klaim umum atas nama toko dan bersaing dengan 2
+// aksi utama. Ubah ke true untuk menampilkannya lagi.
+const SHOW_VALUES = false;
 
 // Kalau toko belum upload logo, tampilkan monogram dari nama toko
 // (2 huruf pertama) dengan gradient warna brand - lebih personal &
@@ -788,13 +836,13 @@ export function FeedbackCard({ product }: { product: Product }) {
           {!hasCover && <BrandMarkGlow product={product} />}
 
           <p
-            className={`text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--brand)] ${eyebrowTopClass}`}
-            style={DISPLAY}
+            className={`text-[12.5px] font-medium text-[#132320]/50 ${eyebrowTopClass}`}
+            style={BODY}
           >
             Terima kasih sudah berkunjung
           </p>
           <h1
-            className="mt-1.5 max-w-full text-balance break-words text-2xl font-bold leading-[1.15] tracking-tight text-[#132320]"
+            className="mt-1.5 max-w-full text-balance break-words text-[27px] font-bold leading-[1.15] tracking-[-0.025em] text-[#132320]"
             style={DISPLAY}
           >
             {product.business_name}
@@ -825,7 +873,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           {/* 3 nilai layanan - hanya di langkah pilihan (di langkah
               form dibuang biar ruang untuk mengetik lebih lega).
               Teksnya sengaja umum supaya cocok untuk semua jenis usaha. */}
-          {step === "choice" ? (
+          {step === "choice" && SHOW_VALUES ? (
             <div className="mt-6 grid w-full grid-cols-3 divide-x divide-black/[0.07]">
               {[
                 { icon: ShieldCheck, top: "Pelayanan", bottom: "Terbaik" },
@@ -850,7 +898,7 @@ export function FeedbackCard({ product }: { product: Product }) {
               ))}
             </div>
           ) : (
-            <div className="mt-3 h-px w-10 bg-[#132320]/10" />
+            <div className="mt-5 h-px w-10 bg-[#132320]/10" />
           )}
         </CardHeader>
 
@@ -860,6 +908,7 @@ export function FeedbackCard({ product }: { product: Product }) {
               <ActionCard
                 onClick={handleSatisfied}
                 busy={reviewing}
+                variant="primary"
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
@@ -1073,7 +1122,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           >
             Terima Kasih
           </p>
-          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#132320]/55">
+          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[12px] font-medium text-[#132320]/50">
             <span className="h-px w-8 bg-[#132320]/15" />
             Atas dukungan Anda
             <span className="h-px w-8 bg-[#132320]/15" />
