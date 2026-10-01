@@ -166,7 +166,7 @@ function ActionCard({
             style={{
               color: primary
                 ? `color-mix(in srgb, ${onBrand} 82%, transparent)`
-                : "rgba(19,35,32,0.62)",
+                : "rgba(19,35,32,0.7)",
             }}
           >
             {description}
@@ -316,7 +316,7 @@ function ConnectWithUs({
           <span className="block text-[13.5px] font-semibold text-[#132320]">
             {mainLinks.length > 0 ? "Lihat Menu & Katalog" : "Ikuti Kami"}
           </span>
-          <span className="mt-0.5 block truncate text-[12px] text-[#132320]/55">
+          <span className="mt-0.5 block truncate text-[12px] text-[#132320]/68">
             {mainLinks.length > 0
               ? "Jelajahi menu, produk, dan promo menarik kami."
               : "Temukan kami di media sosial untuk info dan promo terbaru."}
@@ -362,7 +362,7 @@ function ConnectWithUs({
           type="button"
           onClick={() => setOpen(false)}
           aria-label="Tutup"
-          className="absolute right-2.5 top-2 flex h-11 w-11 items-center justify-center rounded-full text-[#132320]/50 transition hover:bg-[#132320]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-90"
+          className="absolute right-2.5 top-2 flex h-11 w-11 items-center justify-center rounded-full text-[#132320]/62 transition hover:bg-[#132320]/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-90"
         >
           <X className="h-4 w-4" />
         </button>
@@ -399,7 +399,7 @@ function ConnectWithUs({
             >
               {product.business_name}
             </p>
-            <p className="mt-0.5 text-[10.5px] text-[#132320]/45">
+            <p className="mt-0.5 text-[11.5px] text-[#132320]/62">
               Terhubung dengan Kami
             </p>
           </div>
@@ -849,7 +849,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           {!hasCover && <BrandMarkGlow product={product} />}
 
           <p
-            className={`text-[12.5px] font-medium text-[#132320]/50 ${eyebrowTopClass}`}
+            className={`text-[12.5px] font-medium text-[#132320]/62 ${eyebrowTopClass}`}
             style={BODY}
           >
             Terima kasih sudah berkunjung
@@ -879,7 +879,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           <p className="mt-6 text-[17px] font-semibold tracking-[-0.015em] text-[#132320]">
             Bagaimana pengalaman Anda hari ini?
           </p>
-          <p className="mx-auto mt-1.5 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/55">
+          <p className="mx-auto mt-1.5 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/68">
             Kami selalu ingin memberikan yang terbaik untuk Anda.
           </p>
 
@@ -926,7 +926,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
-                description="Bantu bisnis kami berkembang dengan ulasan di Google Maps."
+                description="Bantu Bisnis Kami Berkembang dengan ulasan di Google Maps."
                 chip={
                   <>
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
@@ -969,7 +969,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                   <p className="font-semibold text-[#132320]">
                     Terima kasih atas masukan Anda
                   </p>
-                  <p className="text-sm text-[#132320]/55">
+                  <p className="text-sm text-[#132320]/68">
                     Laporan Anda sudah kami terima secara anonim dan langsung
                     masuk ke dashboard pemilik toko.
                   </p>
@@ -980,7 +980,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                     type="button"
                     onClick={() => setStep("choice")}
                     disabled={loading}
-                    className="-ml-2 flex min-h-11 items-center gap-1 px-2 text-xs font-medium text-[#132320]/45 transition hover:text-[#132320] disabled:opacity-40"
+                    className="-ml-2 flex min-h-11 items-center gap-1 px-2 text-xs font-medium text-[#132320]/62 transition hover:text-[#132320] disabled:opacity-40"
                   >
                     <ChevronLeft className="h-3.5 w-3.5" />
                     Kembali
@@ -1003,7 +1003,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                       <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#132320]">
                         Hubungi Layanan Pelanggan
                       </p>
-                      <p className="mt-0.5 text-[12px] text-[#132320]/55">
+                      <p className="mt-0.5 text-[12px] text-[#132320]/68">
                         Dapatkan Bantuan Cepat atau Solusi Masalah.
                       </p>
                     </div>
@@ -1044,7 +1044,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                           alt="Preview foto"
                           className="h-12 w-12 rounded-lg object-cover"
                         />
-                        <span className="flex-1 truncate text-xs text-[#132320]/55">
+                        <span className="flex-1 truncate text-xs text-[#132320]/68">
                           {photoFile?.name}
                         </span>
                         <button
@@ -1061,10 +1061,10 @@ export function FeedbackCard({ product }: { product: Product }) {
                         onClick={() => fileInputRef.current?.click()}
                         className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-dashed border-black/[0.16] bg-white px-3 py-2.5 text-left transition hover:border-[var(--brand)]/45 hover:bg-[var(--brand)]/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F6F8F7] text-[#132320]/45">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F6F8F7] text-[#132320]/62">
                           <ImagePlus className="h-4 w-4" />
                         </span>
-                        <span className="text-[13px] text-[#132320]/55">
+                        <span className="text-[13px] text-[#132320]/68">
                           Ketuk untuk pilih foto
                         </span>
                       </button>
@@ -1086,7 +1086,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                         <ShieldCheck className="h-3.5 w-3.5" />
                         Kirim sebagai anonim
                       </span>
-                      <span className="mt-1 block text-[12px] leading-relaxed text-[#132320]/55">
+                      <span className="mt-1 block text-[12px] leading-relaxed text-[#132320]/68">
                         Nama disembunyikan, laporan langsung masuk ke dashboard
                         pemilik toko tanpa lewat WhatsApp.
                       </span>
@@ -1139,7 +1139,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                     </span>
                   </Button>
 
-                  <p className="text-center text-[11px] leading-relaxed text-[#132320]/35">
+                  <p className="text-center text-[11.5px] leading-relaxed text-[#132320]/62">
                     Masukan Anda bersifat rahasia &amp; hanya diteruskan
                     kepada pemilik usaha.
                   </p>
@@ -1174,7 +1174,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           >
             Terima Kasih
           </p>
-          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[12px] font-medium text-[#132320]/50">
+          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[12px] font-medium text-[#132320]/62">
             <span className="h-px w-8 bg-[#132320]/15" />
             Atas dukungan Anda
             <span className="h-px w-8 bg-[#132320]/15" />
