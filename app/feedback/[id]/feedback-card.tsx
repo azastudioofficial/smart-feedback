@@ -110,7 +110,7 @@ function ActionCard({
       disabled={busy}
       aria-busy={busy || undefined}
       aria-haspopup={ariaHaspopup}
-      className={`page-enter group relative block w-full overflow-hidden rounded-[20px] p-[18px] [-webkit-tap-highlight-color:transparent] text-left transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+      className={`page-enter group relative block w-full overflow-hidden rounded-[20px] p-4 [@media(min-height:820px)]:p-[18px] [-webkit-tap-highlight-color:transparent] text-left transition-all duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 active:scale-[0.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
         primary ? "" : "bg-white ring-1 ring-black/[0.07] hover:ring-black/[0.14]"
       }`}
       style={{
@@ -134,9 +134,9 @@ function ActionCard({
           className="pointer-events-none absolute -right-12 -top-14 h-40 w-40 rounded-full bg-white/[0.16] blur-2xl"
         />
       )}
-      <span className="relative flex items-start gap-3.5">
+      <span className="relative flex items-center gap-3.5">
         <span
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
           style={
             primary
               ? {
@@ -154,7 +154,7 @@ function ActionCard({
           {icon}
         </span>
 
-        <span className="min-w-0 flex-1 pt-0.5">
+        <span className="min-w-0 flex-1">
           <span
             className="block text-[15px] font-semibold leading-snug tracking-[-0.01em]"
             style={{ color: primary ? onBrand : "#132320" }}
@@ -162,32 +162,22 @@ function ActionCard({
             {title}
           </span>
           <span
-            className="mt-1 block text-[12.5px] leading-relaxed"
+            className="mt-0.5 block text-[12.5px] leading-[1.45]"
             style={{
               color: primary
-                ? `color-mix(in srgb, ${onBrand} 82%, transparent)`
+                ? `color-mix(in srgb, ${onBrand} 84%, transparent)`
                 : "rgba(19,35,32,0.7)",
             }}
           >
             {description}
           </span>
         </span>
-      </span>
 
-      {/* Baris bawah: label aksi di kiri, tombol panah di kanan, dipisah
-          garis tipis dari teks di atasnya. */}
-      <span
-        className="relative mt-4 flex w-full items-center gap-2 border-t pt-3 text-[12px] font-medium"
-        style={{
-          color: primary ? onBrand : "rgba(19,35,32,0.75)",
-          borderColor: primary
-            ? `color-mix(in srgb, ${onBrand} 22%, transparent)`
-            : "rgba(19,35,32,0.07)",
-        }}
-      >
-        {chip}
+        {/* Tombol panah di baris atas (bukan di dasar kartu) - menghemat
+            tinggi kartu supaya dua pilihan + Connect With Us muat dalam
+            satu layar HP tanpa scroll. */}
         <span
-          className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm transition-transform duration-300 group-hover:translate-x-0.5 motion-reduce:transition-none"
           style={
             primary
               ? { backgroundColor: onBrand, color: "var(--brand)" }
@@ -200,6 +190,21 @@ function ActionCard({
             <ArrowRight className="h-4 w-4" />
           )}
         </span>
+      </span>
+
+      {/* Baris keterangan tujuan - hanya di layar yang cukup tinggi
+          (desktop/tablet/HP sangat tinggi). Di HP umumnya disembunyikan
+          karena judul + deskripsi sudah menjelaskan tujuannya. */}
+      <span
+        className="relative mt-3 hidden w-full items-center gap-2 border-t pt-2.5 text-[12px] font-medium [@media(min-height:820px)]:flex"
+        style={{
+          color: primary ? onBrand : "rgba(19,35,32,0.75)",
+          borderColor: primary
+            ? `color-mix(in srgb, ${onBrand} 22%, transparent)`
+            : "rgba(19,35,32,0.07)",
+        }}
+      >
+        {chip}
       </span>
     </button>
   );
@@ -293,7 +298,7 @@ function ConnectWithUs({
         onClick={handleOpen}
         aria-haspopup="dialog"
         style={{ animationDelay: "280ms" }}
-        className="page-enter group mt-3.5 flex w-full items-center gap-3.5 rounded-[18px] bg-[#F6F8F7] [-webkit-tap-highlight-color:transparent] px-4 py-3 text-left ring-1 ring-black/[0.05] transition-all duration-300 hover:bg-white hover:ring-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.99] motion-reduce:transition-none"
+        className="page-enter group mt-3 flex w-full items-center gap-3.5 rounded-[18px] bg-[#F6F8F7] [-webkit-tap-highlight-color:transparent] px-4 py-2.5 text-left ring-1 ring-black/[0.05] transition-all duration-300 hover:bg-white hover:ring-black/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] active:scale-[0.99] motion-reduce:transition-none"
       >
         <span className="flex shrink-0 -space-x-2" aria-hidden="true">
           {[...mainLinks, ...iconLinks].slice(0, 4).map((l) => {
@@ -302,7 +307,7 @@ function ConnectWithUs({
             return (
               <span
                 key={l.id}
-                className="flex h-9 w-9 items-center justify-center rounded-full ring-2 ring-[#F6F8F7] transition-all duration-300 group-hover:ring-white"
+                className="flex h-8 w-8 items-center justify-center rounded-full ring-2 ring-[#F6F8F7] transition-all duration-300 group-hover:ring-white"
                 style={{
                   backgroundColor: `color-mix(in srgb, ${meta.color} 14%, white)`,
                 }}
@@ -773,7 +778,7 @@ export function FeedbackCard({ product }: { product: Product }) {
         // jadi kartu melayang dengan sudut membulat dan bayangan.
         className={`relative flex-1 overflow-hidden rounded-none border-black/[0.04] bg-white ring-0 sm:flex-none sm:rounded-xl sm:ring-1 sm:shadow-[0_1px_2px_rgba(19,35,32,0.04),0_35px_70px_-25px_rgba(19,35,32,0.38)] ${
           hasCover ? "pb-0 pt-0" : "pb-0"
-        }`}
+        } gap-3!`}
       >
         {!hasCover && (
           // Aksen gradient tipis di tepi atas - cuma dipakai kalau
@@ -849,7 +854,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           {!hasCover && <BrandMarkGlow product={product} />}
 
           <p
-            className={`text-[12.5px] font-medium text-[#132320]/62 ${eyebrowTopClass}`}
+            className={`text-[12.5px] font-medium text-[#132320]/62 [@media(max-height:620px)]:hidden ${eyebrowTopClass}`}
             style={BODY}
           >
             Terima kasih sudah berkunjung
@@ -876,10 +881,10 @@ export function FeedbackCard({ product }: { product: Product }) {
             />
           )}
 
-          <p className="mt-6 text-[17px] font-semibold tracking-[-0.015em] text-[#132320]">
+          <p className="mt-3.5 text-[17px] font-semibold tracking-[-0.015em] text-[#132320] [@media(min-height:820px)]:mt-6">
             Bagaimana pengalaman Anda hari ini?
           </p>
-          <p className="mx-auto mt-1.5 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/68">
+          <p className="mx-auto mt-1 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/68 [@media(max-height:660px)]:hidden">
             Kami selalu ingin memberikan yang terbaik untuk Anda.
           </p>
 
@@ -911,13 +916,17 @@ export function FeedbackCard({ product }: { product: Product }) {
               ))}
             </div>
           ) : (
-            <div className="mt-5 h-px w-10 bg-[#132320]/10" />
+            <div
+              className={`mt-5 h-px w-10 bg-[#132320]/10 ${
+                step === "choice" ? "hidden [@media(min-height:820px)]:block" : ""
+              }`}
+            />
           )}
         </CardHeader>
 
-        <CardContent className="px-4 pb-5 min-[400px]:px-5 sm:px-6">
+        <CardContent className="px-4 pb-4 min-[400px]:px-5 sm:px-6">
           {step === "choice" && (
-            <div className="space-y-3.5">
+            <div className="space-y-2.5">
               <ActionCard
                 onClick={handleSatisfied}
                 busy={reviewing}
