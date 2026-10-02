@@ -3,6 +3,7 @@
 
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { safeHttpUrl } from "@/lib/safe-url";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,6 +26,14 @@ export async function activateProduct(
 ): Promise<ActivateResult> {
   if (!UUID_REGEX.test(productId)) {
     return { success: false, error: "Kartu tidak ditemukan." };
+  }
+
+  // Batas per IP (Cloudflare Rate Limiting, lihat wrangler.jsonc).
+  if (!(await checkRateLimit("ACTIVATE_LIMITER", "activate"))) {
+    return {
+      success: false,
+      error: "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.",
+    };
   }
 
   // Validasi & rapikan input di SERVER (form di browser bisa dilewati).
