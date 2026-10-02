@@ -9,12 +9,19 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth-guards";
 
 type ActionResult = { success: boolean; error?: string };
 
 export async function approveActivation(
   productId: string
 ): Promise<ActionResult> {
+  // Hanya Super Admin / Reseller. Owner toko TIDAK boleh menyetujui
+  // aktivasinya sendiri (dikunci juga di database, lihat
+  // sql/11-security-hardening.sql).
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
 
   const { error } = await supabase
@@ -35,6 +42,9 @@ export async function approveActivation(
 export async function rejectActivation(
   productId: string
 ): Promise<ActionResult> {
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
 
   const { error } = await supabase
