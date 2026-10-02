@@ -4,6 +4,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { buildWhatsappMessage, buildWhatsappUrl, generateShortCode, slugify } from "@/lib/utils";
 import { isAllowedCloudinaryUrl } from "@/lib/safe-url";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +38,14 @@ export async function submitFeedback(
   if (!UUID_REGEX.test(input.productId ?? "")) {
     return { success: false, error: "Toko tidak ditemukan." };
   }
+  // Batas per IP (Cloudflare Rate Limiting, lihat wrangler.jsonc).
+  if (!(await checkRateLimit("FEEDBACK_LIMITER", "feedback"))) {
+    return {
+      success: false,
+      error: "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.",
+    };
+  }
+
   const complaintText = (input.complaintText ?? "").trim();
   if (!complaintText) {
     return { success: false, error: "Mohon isi pesan Anda." };
