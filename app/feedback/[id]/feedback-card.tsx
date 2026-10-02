@@ -683,8 +683,8 @@ export function FeedbackCard({ product }: { product: Product }) {
       new Promise((resolve) => setTimeout(resolve, 1200)),
     ]);
 
-    if (product.google_review_url) {
-      window.location.href = product.google_review_url;
+    if (/^https?:\/\//i.test(product.google_review_url ?? "")) {
+      window.location.href = product.google_review_url as string;
     } else {
       setReviewing(false);
     }
