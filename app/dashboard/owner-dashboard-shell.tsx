@@ -32,6 +32,8 @@ type Product = {
   cover_position: string | null;
   brand_color: string | null;
   social_links?: SocialLink[] | null;
+  connect_title?: string | null;
+  connect_description?: string | null;
 };
 
 type Feedback = {
