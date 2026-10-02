@@ -1,15 +1,17 @@
 // app/api/cron/cleanup/route.ts
 // Endpoint pembersihan otomatis: hapus keluhan (+ foto Cloudinary-nya)
-// yang usianya lebih dari 30 hari. Dipanggil oleh layanan cron
-// eksternal (misal cron-job.org) secara berkala, BUKAN oleh pengguna.
+// yang usianya lebih dari 30 hari. Dipanggil oleh Cloudflare Cron
+// Trigger (lihat custom-worker.ts), BUKAN oleh pengguna.
 //
-// Cara panggil:
-//   GET https://domainmu.com/api/cron/cleanup?token=RAHASIA
-//   atau header: Authorization: Bearer RAHASIA
+// Cara panggil manual (untuk tes):
+//   curl -H "Authorization: Bearer RAHASIA" https://domainmu.com/api/cron/cleanup
+//
+// Token hanya diterima lewat header Authorization - TIDAK lagi lewat
+// ?token= di URL, karena URL bisa tercatat di log/riwayat browser.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { extractCloudinaryPublicId } from "@/lib/utils";
+import { publicIdsFromUrls, purgeAssets, retryPendingCleanups, type ProductAssets } from "@/lib/asset-cleanup";
 
 const RETENTION_DAYS = 30; // untuk feedbacks (keluhan + foto)
 const RAW_LOGS_RETENTION_DAYS = 90; // untuk scan_logs & positive_clicks
@@ -44,65 +46,6 @@ async function cleanupRawLogs(
   };
 }
 
-/**
- * Ambil public_id Cloudinary dari secure_url yang tersimpan.
- * Contoh input:
- *   https://res.cloudinary.com/xxx/image/upload/v123456/complaint-photos/abc.webp
- * Contoh output:
- *   complaint-photos/abc
- */
-
-/**
- * Hapus banyak foto sekaligus dari Cloudinary lewat Admin API.
- * Beda dengan upload (unsigned, dari browser), operasi hapus ini
- * WAJIB dari server dan pakai API Key + API Secret (rahasia).
- */
-async function deleteFromCloudinary(
-  publicIds: string[]
-): Promise<{ deleted: string[]; errors: string[] }> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-  if (!cloudName || !apiKey || !apiSecret) {
-    throw new Error("Konfigurasi Cloudinary Admin API belum lengkap.");
-  }
-
-  const auth = btoa(`${apiKey}:${apiSecret}`);
-  const deleted: string[] = [];
-  const errors: string[] = [];
-
-  // Cloudinary batasi jumlah public_ids per request - aman dibatch 100.
-  const chunkSize = 100;
-  for (let i = 0; i < publicIds.length; i += chunkSize) {
-    const chunk = publicIds.slice(i, i + chunkSize);
-    const params = new URLSearchParams();
-    chunk.forEach((id) => params.append("public_ids[]", id));
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload?${params.toString()}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Basic ${auth}` },
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      errors.push(`Batch gagal (${response.status}): ${text}`);
-      continue;
-    }
-
-    const result = await response.json();
-    const deletedInBatch = Object.keys(result.deleted ?? {}).filter(
-      (id) => result.deleted[id] === "deleted"
-    );
-    deleted.push(...deletedInBatch);
-  }
-
-  return { deleted, errors };
-}
-
 async function logCronRun(
   service: ReturnType<typeof createServiceClient>,
   detail: Record<string, unknown>
@@ -127,9 +70,7 @@ async function handleCleanup(request: NextRequest) {
   }
 
   const authHeader = request.headers.get("authorization");
-  const headerToken = authHeader?.replace(/^Bearer\s+/i, "");
-  const queryToken = request.nextUrl.searchParams.get("token");
-  const providedToken = headerToken || queryToken;
+  const providedToken = authHeader?.replace(/^Bearer\s+/i, "");
 
   if (providedToken !== secret) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -143,7 +84,7 @@ async function handleCleanup(request: NextRequest) {
 
   const { data: oldFeedbacks, error: fetchError } = await service
     .from("feedbacks")
-    .select("id, photo_url")
+    .select("id, photo_url, photo_path")
     .lt("created_at", cutoff);
 
   if (fetchError) {
@@ -153,86 +94,82 @@ async function handleCleanup(request: NextRequest) {
     );
   }
 
-  if (!oldFeedbacks || oldFeedbacks.length === 0) {
-    const rawLogsResult = await cleanupRawLogs(service);
+  // 3. Hapus foto dulu (Cloudinary + Storage lama). Hasilnya dicek PER
+  //    KELUHAN: baris yang fotonya gagal dihapus TIDAK ikut dihapus,
+  //    jadi tetap ada petunjuk untuk dicoba lagi besok - tidak jadi
+  //    file yatim di Cloudinary.
+  const rows = (oldFeedbacks ?? []).map((f) => ({
+    id: f.id as string,
+    cloudinaryIds: publicIdsFromUrls([f.photo_url]),
+    storage: f.photo_path
+      ? [{ bucket: "complaint-photos", path: f.photo_path as string }]
+      : [],
+  }));
 
-    await logCronRun(service, {
-      ran_at: new Date().toISOString(),
-      deleted_rows: 0,
-      photos_deleted: 0,
-      ...rawLogsResult,
-      status: "ok",
-    });
-    return NextResponse.json({
-      message: "Tidak ada keluhan lama, tapi scan_logs/positive_clicks lama tetap dibersihkan.",
-      deleted_rows: 0,
-      photos_deleted: 0,
-      ...rawLogsResult,
-    });
-  }
-
-  // 3. Hapus foto dari Cloudinary dulu (kalau ada)
-  const publicIds = oldFeedbacks
-    .map((f) => (f.photo_url ? extractCloudinaryPublicId(f.photo_url) : null))
-    .filter((id): id is string => !!id);
-
-  let cloudinaryResult: { deleted: string[]; errors: string[] } = {
-    deleted: [],
-    errors: [],
+  const allAssets: ProductAssets = {
+    cloudinaryIds: [...new Set(rows.flatMap((r) => r.cloudinaryIds))],
+    storage: rows.flatMap((r) => r.storage),
   };
 
-  if (publicIds.length > 0) {
-    try {
-      cloudinaryResult = await deleteFromCloudinary(publicIds);
-    } catch (err) {
+  const { failed, errors: photoErrors } = await purgeAssets(service, allAssets);
+  const failedCloud = new Set(failed.cloudinaryIds);
+  const failedStorage = new Set(failed.storage.map((s) => `${s.bucket}/${s.path}`));
+
+  const deletableIds = rows
+    .filter(
+      (r) =>
+        !r.cloudinaryIds.some((id) => failedCloud.has(id)) &&
+        !r.storage.some((s) => failedStorage.has(`${s.bucket}/${s.path}`))
+    )
+    .map((r) => r.id);
+  const skippedRows = rows.length - deletableIds.length;
+  const photosDeleted = allAssets.cloudinaryIds.length - failed.cloudinaryIds.length;
+
+  // 4. BARU hapus baris data dari Supabase, hanya yang fotonya sudah beres
+  //    (dipecah per 100 id supaya URL query tidak kepanjangan).
+  for (let i = 0; i < deletableIds.length; i += 100) {
+    const { error: deleteError } = await service
+      .from("feedbacks")
+      .delete()
+      .in("id", deletableIds.slice(i, i + 100));
+
+    if (deleteError) {
       return NextResponse.json(
         {
           error:
-            err instanceof Error
-              ? err.message
-              : "Gagal hapus foto Cloudinary.",
+            "Foto sudah dihapus, tapi gagal hapus baris data: " +
+            deleteError.message,
+          photos_deleted: photosDeleted,
         },
         { status: 500 }
       );
     }
   }
 
-  // 4. BARU hapus baris data dari Supabase, setelah foto beres dihapus
-  const idsToDelete = oldFeedbacks.map((f) => f.id);
-  const { error: deleteError } = await service
-    .from("feedbacks")
-    .delete()
-    .in("id", idsToDelete);
-
-  if (deleteError) {
-    return NextResponse.json(
-      {
-        error:
-          "Foto sudah dihapus, tapi gagal hapus baris data: " +
-          deleteError.message,
-        photos_deleted: cloudinaryResult.deleted.length,
-      },
-      { status: 500 }
-    );
-  }
-
+  // 5. Bersihkan log mentah + coba lagi aset yatim dari hapus kartu
+  //    sebelumnya yang sempat gagal.
   const rawLogsResult = await cleanupRawLogs(service);
+  const retry = await retryPendingCleanups(service);
 
-  await logCronRun(service, {
+  const summary = {
     ran_at: new Date().toISOString(),
-    deleted_rows: idsToDelete.length,
-    photos_deleted: cloudinaryResult.deleted.length,
-    photo_errors: cloudinaryResult.errors,
+    deleted_rows: deletableIds.length,
+    skipped_rows: skippedRows,
+    photos_deleted: photosDeleted,
+    photo_errors: photoErrors,
+    orphan_retry: retry,
     ...rawLogsResult,
-    status: "ok",
-  });
+    status: skippedRows > 0 || retry.still_pending > 0 ? "partial" : "ok",
+  };
+
+  await logCronRun(service, summary);
 
   return NextResponse.json({
-    message: "Pembersihan selesai.",
-    deleted_rows: idsToDelete.length,
-    photos_deleted: cloudinaryResult.deleted.length,
-    photo_errors: cloudinaryResult.errors,
-    ...rawLogsResult,
+    message:
+      rows.length === 0
+        ? "Tidak ada keluhan lama, tapi log lama tetap dibersihkan."
+        : "Pembersihan selesai.",
+    ...summary,
   });
 }
 
