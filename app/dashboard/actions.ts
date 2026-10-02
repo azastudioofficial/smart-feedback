@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
 import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
+import { isAllowedCloudinaryUrl, safeHttpUrl } from "@/lib/safe-url";
 
 type ActionResult = { success: boolean; error?: string };
 
@@ -16,7 +17,36 @@ type ActionResult = { success: boolean; error?: string };
  * Cloudinary supaya tidak menumpuk file yatim.
  */
 export async function removeSocialIcon(iconUrl: string): Promise<ActionResult> {
-  if (!iconUrl.includes("res.cloudinary.com")) {
+  // WAJIB login + ikon harus memang milik toko si pemanggil. Tanpa ini,
+  // siapa pun bisa memanggil action ini dengan URL Cloudinary milik toko
+  // lain (URL-nya terlihat publik di halaman feedback) dan menghapusnya.
+  if (!isAllowedCloudinaryUrl(iconUrl)) {
+    return { success: true };
+  }
+
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { success: false, error: "Silakan login ulang." };
+  }
+
+  // RLS: owner hanya melihat tokonya sendiri (super admin melihat semua).
+  const { data: rows } = await supabase
+    .from("products")
+    .select("social_links");
+
+  const isOwnIcon = (rows ?? []).some((row) =>
+    Array.isArray(row.social_links) &&
+    (row.social_links as Array<{ icon_url?: string | null }>).some(
+      (l) => l?.icon_url === iconUrl
+    )
+  );
+
+  // Ikon yang belum pernah tersimpan (baru diupload lalu dibatalkan)
+  // tidak bisa dibuktikan miliknya siapa - dibiarkan, bukan dihapus.
+  if (!isOwnIcon) {
     return { success: true };
   }
 
@@ -73,10 +103,36 @@ export async function updateSettings(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
+  // Validasi di server - form di browser bisa dilewati.
+  const businessName = (data.businessName ?? "").trim();
+  if (!businessName || businessName.length > 120) {
+    return { success: false, error: "Nama toko wajib diisi (maksimal 120 karakter)." };
+  }
+  const reviewUrl = safeHttpUrl(data.googleReviewUrl);
+  if (!reviewUrl) {
+    return {
+      success: false,
+      error: "Link Google Review tidak valid (harus diawali http:// atau https://).",
+    };
+  }
+  const ownerWhatsapp = (data.ownerWhatsapp ?? "").trim();
+  if (ownerWhatsapp && !/^[0-9+\-\s()]{6,30}$/.test(ownerWhatsapp)) {
+    return { success: false, error: "Nomor WhatsApp tidak valid." };
+  }
+  if (data.logoUrl && !isAllowedCloudinaryUrl(data.logoUrl)) {
+    return { success: false, error: "URL logo tidak valid. Upload ulang logonya." };
+  }
+  if (data.coverImageUrl && !isAllowedCloudinaryUrl(data.coverImageUrl)) {
+    return { success: false, error: "URL foto sampul tidak valid. Upload ulang fotonya." };
+  }
+  if (data.brandColor && !/^#[0-9a-fA-F]{6}$/.test(data.brandColor)) {
+    return { success: false, error: "Warna brand tidak valid." };
+  }
+
   const updatePayload: Record<string, unknown> = {
-    business_name: data.businessName,
-    google_review_url: data.googleReviewUrl,
-    owner_whatsapp: data.ownerWhatsapp,
+    business_name: businessName,
+    google_review_url: reviewUrl,
+    owner_whatsapp: ownerWhatsapp,
   };
   if (data.logoUrl) {
     updatePayload.logo_url = data.logoUrl;
@@ -96,7 +152,14 @@ export async function updateSettings(
     // Selalu dikirim (bahkan array kosong) - supaya owner yang
     // menghapus SEMUA tautan lama tetap kesimpen kosong, bukan malah
     // dianggap "tidak berubah" dan tetap pakai data lama.
-    updatePayload.social_links = sanitizeSocialLinks(data.socialLinks);
+    // Maks 20 tautan; ikon custom hanya boleh URL Cloudinary milik kita.
+    updatePayload.social_links = sanitizeSocialLinks(data.socialLinks)
+      .slice(0, 20)
+      .map((link) => ({
+        ...link,
+        label: link.label ? String(link.label).slice(0, 60) : link.label,
+        icon_url: isAllowedCloudinaryUrl(link.icon_url) ? link.icon_url : null,
+      }));
   }
 
   const { error } = await supabase
@@ -122,7 +185,20 @@ export async function removeLogo(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  if (logoUrl.includes("res.cloudinary.com")) {
+  // Pakai URL yang TERSIMPAN di database toko ini (lewat RLS), bukan URL
+  // kiriman client - supaya action ini tidak bisa dipakai menghapus
+  // gambar toko lain. Parameter logoUrl sengaja diabaikan.
+  const { data: own } = await supabase
+    .from("products")
+    .select("logo_url")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!own) {
+    return { success: false, error: "Toko tidak ditemukan." };
+  }
+  logoUrl = (own.logo_url as string | null) ?? "";
+
+  if (isAllowedCloudinaryUrl(logoUrl)) {
     // Logo baru (di Cloudinary) - hapus lewat Admin API
     const publicId = extractCloudinaryPublicId(logoUrl);
     if (publicId) {
@@ -172,7 +248,18 @@ export async function removeCoverImage(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  if (coverImageUrl.includes("res.cloudinary.com")) {
+  // Sama seperti removeLogo: pakai URL yang tersimpan di database.
+  const { data: own } = await supabase
+    .from("products")
+    .select("cover_image_url")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!own) {
+    return { success: false, error: "Toko tidak ditemukan." };
+  }
+  coverImageUrl = (own.cover_image_url as string | null) ?? "";
+
+  if (isAllowedCloudinaryUrl(coverImageUrl)) {
     const publicId = extractCloudinaryPublicId(coverImageUrl);
     if (publicId) {
       try {
@@ -282,7 +369,7 @@ export async function deleteFeedback(feedbackId: string): Promise<ActionResult> 
   // 1. Foto di Cloudinary dulu. Kalau gagal, batalkan - jangan sampai
   //    baris terhapus tapi fotonya tertinggal.
   if (feedback.photo_url) {
-    const publicId = feedback.photo_url.includes("res.cloudinary.com")
+    const publicId = isAllowedCloudinaryUrl(feedback.photo_url)
       ? extractCloudinaryPublicId(feedback.photo_url)
       : null;
     if (publicId) {
