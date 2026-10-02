@@ -3,8 +3,7 @@
 import { notFound, redirect } from "next/navigation";
 import { cache, type CSSProperties } from "react";
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
-import { Ban, Settings } from "lucide-react";
+import { Ban } from "lucide-react";
 import { createServiceClient } from "@/lib/supabase/server";
 import { darkenHex, lightenHex } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -155,25 +154,6 @@ export default async function FeedbackPage({ params }: Props) {
       <div className="relative z-10 flex min-h-[100dvh] w-full justify-center sm:min-h-0 sm:w-auto">
         <FeedbackCard product={product} />
       </div>
-
-      {/* Shortcut buat OWNER - kartu QR yang sama di-scan pelanggan
-          maupun owner sendiri, jadi owner perlu jalan pintas ke
-          dashboard tanpa harus ingat/ketik URL terpisah. Sengaja kecil
-          & transparan supaya tidak mengganggu pelanggan, dan TETAP
-          hanya mengarah ke halaman login biasa (tidak membuka akses
-          apapun).
-
-          Posisi: absolute (bukan fixed). Di HP ia duduk di pojok kanan
-          atas, di atas foto sampul, jadi tidak pernah menimpa tombol
-          atau teks kartu saat halaman digulir. Di layar >= sm (kartu
-          melayang di tengah) ia pindah ke pojok kanan bawah halaman. */}
-      <Link
-        href="/login"
-        className="absolute right-3 top-3 z-20 flex h-11 w-11 sm:bottom-5 sm:right-5 sm:top-auto items-center justify-center rounded-full bg-white/70 text-[#132320]/30 shadow-sm backdrop-blur transition hover:text-[#132320]/70 active:scale-95"
-        title="Kelola Toko (khusus owner)"
-      >
-        <Settings className="h-5 w-5" />
-      </Link>
     </main>
   );
 }
