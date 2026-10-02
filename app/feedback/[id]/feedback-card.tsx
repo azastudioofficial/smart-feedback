@@ -12,6 +12,7 @@
 //    ada) - supaya toko yang baru aktivasi tidak pernah terlihat
 //    "kosong/rusak" hanya karena belum sempat upload foto sampul.
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1172,7 +1173,7 @@ export function FeedbackCard({ product }: { product: Product }) {
             Padding bawah mengikuti safe-area iPhone supaya tidak
             menempel ke garis indikator Home. */}
         <div
-          className="relative mt-auto px-6 pt-9 text-center"
+          className="relative mt-auto flex flex-col items-center px-6 pt-9 text-center"
           style={{
             paddingBottom: "max(1.75rem, env(safe-area-inset-bottom))",
             backgroundImage:
@@ -1208,6 +1209,22 @@ export function FeedbackCard({ product }: { product: Product }) {
               Terima kasih atas dukungan Anda
             </p>
           )}
+
+          {/* Pintu masuk OWNER. Kartu QR yang sama di-scan pelanggan dan
+              owner sendiri, jadi owner butuh jalan pintas ke dashboard.
+              Dulu berupa tombol gear yang melayang di atas foto sampul;
+              sekarang tautan teks senyap di footer - pola umum halaman
+              publik produk SaaS ("Masuk", "Kelola"). Tidak menimpa
+              konten, tidak menarik perhatian pelanggan, dan TETAP hanya
+              mengarah ke halaman login biasa (tidak membuka akses apapun).
+              Tinggi sentuh 44px walau teksnya kecil. */}
+          <Link
+            href="/login"
+            aria-label="Kelola toko (khusus pemilik)"
+            className="relative mt-0.5 inline-flex min-h-11 items-center rounded-full px-4 text-[11px] font-medium text-[#132320]/50 underline-offset-4 transition hover:text-[#132320]/75 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+          >
+            Kelola toko
+          </Link>
         </div>
       </Card>
     </div>
