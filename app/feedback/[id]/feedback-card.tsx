@@ -321,7 +321,7 @@ function ConnectWithUs({
           <span className="block text-[13.5px] font-semibold text-[#132320]">
             {mainLinks.length > 0 ? "Lihat Menu & Katalog" : "Ikuti Kami"}
           </span>
-          <span className="mt-0.5 block truncate text-[12px] text-[#132320]/68">
+          <span className="mt-0.5 line-clamp-2 block text-[12px] leading-snug text-[#132320]/68">
             {mainLinks.length > 0
               ? "Jelajahi menu, produk, dan promo menarik kami."
               : "Temukan kami di media sosial untuk info dan promo terbaru."}
@@ -881,12 +881,19 @@ export function FeedbackCard({ product }: { product: Product }) {
             />
           )}
 
-          <p className="mt-3.5 text-[17px] font-semibold tracking-[-0.015em] text-[#132320] [@media(min-height:820px)]:mt-6">
-            Bagaimana pengalaman Anda hari ini?
-          </p>
-          <p className="mx-auto mt-1 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/68 [@media(max-height:660px)]:hidden">
-            Kami selalu ingin memberikan yang terbaik untuk Anda.
-          </p>
+          {/* Pertanyaan hanya di langkah pilihan. Di langkah form, judul
+              "Hubungi Layanan Pelanggan" sudah menjelaskan konteksnya -
+              tanpa ini judulnya tampil dobel. */}
+          {step === "choice" && (
+            <>
+              <p className="mt-3.5 text-[17px] font-semibold tracking-[-0.015em] text-[#132320] [@media(min-height:820px)]:mt-6">
+                Bagaimana pengalaman Anda hari ini?
+              </p>
+              <p className="mx-auto mt-1 max-w-[270px] text-pretty text-[12.5px] leading-relaxed text-[#132320]/68 [@media(max-height:660px)]:hidden">
+                Kami selalu ingin memberikan yang terbaik untuk Anda.
+              </p>
+            </>
+          )}
 
           {/* 3 nilai layanan - hanya di langkah pilihan (di langkah
               form dibuang biar ruang untuk mengetik lebih lega).
@@ -935,7 +942,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                 accent="var(--brand)"
                 icon={<MapPin className="h-6 w-6" />}
                 title="Bagikan Pengalaman Anda"
-                description="Bantu Bisnis Kami Berkembang dengan ulasan di Google Maps."
+                description="Bantu bisnis kami berkembang dengan ulasan di Google Maps."
                 chip={
                   <>
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
@@ -952,7 +959,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                 accent="#2F7D5B"
                 icon={<MessageSquareCheck className="h-6 w-6" />}
                 title="Hubungi Layanan Pelanggan"
-                description="Dapatkan Bantuan Cepat atau Solusi Masalah."
+                description="Dapatkan bantuan cepat atau solusi masalah."
                 chip={
                   <>
                     <span
@@ -1013,7 +1020,7 @@ export function FeedbackCard({ product }: { product: Product }) {
                         Hubungi Layanan Pelanggan
                       </p>
                       <p className="mt-0.5 text-[12px] text-[#132320]/68">
-                        Dapatkan Bantuan Cepat atau Solusi Masalah.
+                        Dapatkan bantuan cepat atau solusi masalah.
                       </p>
                     </div>
                   </div>
