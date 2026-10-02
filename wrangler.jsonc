@@ -8,6 +8,21 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  // Rate limit per IP (gratis, tanpa domain sendiri). Dipakai oleh
+  // lib/rate-limit.ts. "period" hanya boleh 10 atau 60 (detik).
+  // namespace_id = angka bebas yang unik di akun Cloudflare-mu.
+  "ratelimits": [
+    {
+      "name": "FEEDBACK_LIMITER",
+      "namespace_id": "41001",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "ACTIVATE_LIMITER",
+      "namespace_id": "41002",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
   "triggers": {
     "crons": ["0 3 * * *"]
   }
