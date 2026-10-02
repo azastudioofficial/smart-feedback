@@ -2,6 +2,11 @@
 // app/activate/[id]/actions.ts
 
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
+import { safeHttpUrl } from "@/lib/safe-url";
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ActivateInput = {
   businessName: string;
@@ -18,6 +23,37 @@ export async function activateProduct(
   productId: string,
   formData: ActivateInput
 ): Promise<ActivateResult> {
+  if (!UUID_REGEX.test(productId)) {
+    return { success: false, error: "Kartu tidak ditemukan." };
+  }
+
+  // Validasi & rapikan input di SERVER (form di browser bisa dilewati).
+  const businessName = (formData.businessName ?? "").trim();
+  const ownerWhatsapp = (formData.ownerWhatsapp ?? "").trim();
+  const email = (formData.email ?? "").trim().toLowerCase();
+  const reviewUrl = safeHttpUrl(formData.googleReviewUrl);
+
+  if (!businessName || businessName.length > 120) {
+    return { success: false, error: "Nama toko wajib diisi (maksimal 120 karakter)." };
+  }
+  if (!reviewUrl) {
+    return {
+      success: false,
+      error: "Link Google Review tidak valid (harus diawali http:// atau https://).",
+    };
+  }
+  // WhatsApp hanya wajib untuk paket Pro (form mengosongkannya di Basic),
+  // jadi boleh kosong - tapi kalau diisi harus berupa nomor telepon.
+  if (ownerWhatsapp && !/^[0-9+\-\s()]{6,30}$/.test(ownerWhatsapp)) {
+    return { success: false, error: "Nomor WhatsApp tidak valid." };
+  }
+  if (!EMAIL_REGEX.test(email) || email.length > 254) {
+    return { success: false, error: "Format email tidak valid." };
+  }
+  if (typeof formData.password !== "string" || formData.password.length < 6 || formData.password.length > 72) {
+    return { success: false, error: "Password harus 6-72 karakter." };
+  }
+
   const service = createServiceClient();
 
   // Cek dulu status kartu - jangan terima submit dobel untuk kartu
@@ -57,7 +93,7 @@ export async function activateProduct(
   const auth = await createServerSupabase();
 
   const { data: signUpData, error: signUpError } = await auth.auth.signUp({
-    email: formData.email,
+    email,
     password: formData.password,
   });
 
@@ -86,9 +122,9 @@ export async function activateProduct(
   const { error: updateError } = await service
     .from("products")
     .update({
-      business_name: formData.businessName,
-      google_review_url: formData.googleReviewUrl,
-      owner_whatsapp: formData.ownerWhatsapp,
+      business_name: businessName,
+      google_review_url: reviewUrl,
+      owner_whatsapp: ownerWhatsapp,
       owner_id: userId,
       pending_review: true,
       terms_accepted_at: new Date().toISOString(),
