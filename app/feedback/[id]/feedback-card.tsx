@@ -56,6 +56,10 @@ type Product = {
   cover_image_url?: string | null;
   cover_position?: string | null;
   social_links?: SocialLink[] | null;
+  // Judul & keterangan tombol "Terhubung dengan Kami" yang diketik owner
+  // (opsional). Kosong -> pakai teks bawaan yang netral.
+  connect_title?: string | null;
+  connect_description?: string | null;
 };
 
 // Kartu aksi bergaya premium: tile ikon besar, judul + deskripsi, "chip"
@@ -295,27 +299,45 @@ function ConnectWithUs({
           {[...mainLinks, ...iconLinks].slice(0, 4).map((l) => {
             const meta = SOCIAL_PLATFORM_META[l.platform];
             const Icon = meta.icon;
+            // Ikon custom hasil upload owner ikut tampil di sini (versi
+            // thumbnail 64px, ringan), bukan cuma ikon bawaan platform.
+            const customIcon = l.icon_url || null;
             return (
               <span
                 key={l.id}
-                className="flex h-8 w-8 items-center justify-center rounded-full ring-2 ring-[#F6F8F7] transition-all duration-300 group-hover:ring-white"
+                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full ring-2 ring-[#F6F8F7] transition-all duration-300 group-hover:ring-white"
                 style={{
-                  backgroundColor: `color-mix(in srgb, ${meta.color} 14%, white)`,
+                  backgroundColor: customIcon
+                    ? "white"
+                    : `color-mix(in srgb, ${meta.color} 14%, white)`,
                 }}
               >
-                <Icon className="h-4 w-4" style={{ color: meta.color }} />
+                {customIcon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cloudinaryThumbnail(customIcon, "f_auto,q_auto,w_64")}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-contain p-1"
+                  />
+                ) : (
+                  <Icon className="h-4 w-4" style={{ color: meta.color }} />
+                )}
               </span>
             );
           })}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[13.5px] font-semibold text-[#132320]">
-            {mainLinks.length > 0 ? "Lihat Menu & Katalog" : "Ikuti Kami"}
+            {product.connect_title?.trim() ||
+              (mainLinks.length > 0 ? "Terhubung dengan Kami" : "Ikuti Kami")}
           </span>
           <span className="mt-0.5 line-clamp-2 block text-[12px] leading-snug text-[#132320]/68">
-            {mainLinks.length > 0
-              ? "Jelajahi menu, produk, dan promo menarik kami."
-              : "Temukan kami di media sosial untuk info dan promo terbaru."}
+            {product.connect_description?.trim() ||
+              (mainLinks.length > 0
+                ? "Katalog, website, media sosial, dan tautan lainnya dari kami."
+                : "Temukan kami di media sosial untuk info dan promo terbaru.")}
           </span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-[#132320]/30 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-[#132320]/60 motion-reduce:transition-none" />
