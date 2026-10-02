@@ -13,7 +13,6 @@
 //    "kosong/rusak" hanya karena belum sempat upload foto sampul.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Great_Vibes } from "next/font/google";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,15 +56,6 @@ type Product = {
   cover_position?: string | null;
   social_links?: SocialLink[] | null;
 };
-
-// Font tulisan tangan HANYA untuk footer "Terima Kasih". Dimuat lewat
-// next/font (di-host sendiri saat build, tanpa request ke Google waktu
-// pelanggan membuka halaman) dan hanya 1 bobot, jadi ringan.
-const script = Great_Vibes({
-  subsets: ["latin"],
-  weight: "400",
-  display: "swap",
-});
 
 // Kartu aksi bergaya premium: tile ikon besar, judul + deskripsi, "chip"
 // kecil penanda manfaat, dan tombol panah bulat di kanan. Warna tiap
@@ -543,6 +533,10 @@ const DISPLAY = { fontFamily: "var(--font-display)" };
 // Dimatikan karena itu klaim umum atas nama toko dan bersaing dengan 2
 // aksi utama. Ubah ke true untuk menampilkannya lagi.
 const SHOW_VALUES = false;
+
+// Satu baris ucapan terima kasih yang tenang di dasar kartu. Ubah ke
+// false kalau footer mau sepenuhnya tanpa tulisan (garis + kilau saja).
+const SHOW_FOOTER_THANKS = true;
 
 // Kalau toko belum upload logo, tampilkan monogram dari nama toko
 // (2 huruf pertama) dengan gradient warna brand - lebih personal &
@@ -1169,69 +1163,51 @@ export function FeedbackCard({ product }: { product: Product }) {
           )}
         </CardContent>
 
-        {/* Footer ucapan terima kasih - tulisan tangan + gelombang lembut
-            berwarna brand toko di dasar kartu. */}
-        <div className="relative mt-auto overflow-hidden px-6 pb-10 pt-6 text-center">
-          {/* Gelombang berlapis: tiga lapis kurva halus dengan gradasi
-              warna brand (pekat di atas, memudar ke bawah) + garis
-              tipis di tepi atas lapisan belakang. Bukan satu blok
-              warna datar - kedalaman dari transparansi bertumpuk,
-              seperti latar halaman produk SaaS premium. Garis tepi
-              memakai non-scaling-stroke supaya tetap setipis 1px di
-              lebar layar berapa pun. */}
-          <svg
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full"
-            viewBox="0 0 400 96"
-            preserveAspectRatio="none"
+        {/* Footer: tenang & minimal ala produk SaaS premium. Tidak ada
+            ornamen - hanya garis halus yang memudar di kedua ujung
+            (dengan satu titik warna brand di tengah), kilau lembut
+            warna brand dari dasar kartu, dan satu baris teks kecil.
+            Ucapan "Terima kasih sudah berkunjung" sudah ada di bagian
+            atas, jadi di sini sengaja tidak diulang dengan huruf besar.
+            Padding bawah mengikuti safe-area iPhone supaya tidak
+            menempel ke garis indikator Home. */}
+        <div
+          className="relative mt-auto px-6 pt-9 text-center"
+          style={{
+            paddingBottom: "max(1.75rem, env(safe-area-inset-bottom))",
+            backgroundImage:
+              "radial-gradient(120% 100% at 50% 135%, color-mix(in srgb, var(--brand) 13%, white), transparent 68%)",
+          }}
+        >
+          <div
             aria-hidden="true"
+            className="absolute inset-x-8 top-0 flex items-center justify-center"
           >
-            <defs>
-              <linearGradient id="fw-back" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" style={{ stopColor: "var(--brand)", stopOpacity: 0.16 }} />
-                <stop offset="1" style={{ stopColor: "var(--brand)", stopOpacity: 0.03 }} />
-              </linearGradient>
-              <linearGradient id="fw-mid" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.07 }} />
-                <stop offset="0.55" style={{ stopColor: "var(--brand)", stopOpacity: 0.12 }} />
-                <stop offset="1" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.08 }} />
-              </linearGradient>
-              <linearGradient id="fw-front" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.12 }} />
-                <stop offset="1" style={{ stopColor: "var(--brand-dark)", stopOpacity: 0.05 }} />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,40 C60,16 124,18 188,38 S308,66 400,30 L400,96 L0,96 Z"
-              fill="url(#fw-back)"
+            <span
+              className="h-px flex-1"
+              style={{
+                backgroundImage:
+                  "linear-gradient(90deg, transparent, color-mix(in srgb, var(--brand) 28%, transparent))",
+              }}
             />
-            <path
-              d="M0,40 C60,16 124,18 188,38 S308,66 400,30"
-              fill="none"
-              strokeWidth="1"
-              vectorEffect="non-scaling-stroke"
-              style={{ stroke: "var(--brand)", strokeOpacity: 0.28 }}
+            <span
+              className="mx-3 h-1.5 w-1.5 rounded-full"
+              style={{ backgroundColor: "var(--brand)", opacity: 0.55 }}
             />
-            <path
-              d="M0,60 C72,42 142,46 214,60 S334,78 400,54 L400,96 L0,96 Z"
-              fill="url(#fw-mid)"
+            <span
+              className="h-px flex-1"
+              style={{
+                backgroundImage:
+                  "linear-gradient(270deg, transparent, color-mix(in srgb, var(--brand) 28%, transparent))",
+              }}
             />
-            <path
-              d="M0,78 C84,66 152,68 232,78 S342,90 400,74 L400,96 L0,96 Z"
-              fill="url(#fw-front)"
-            />
-          </svg>
+          </div>
 
-          <p
-            className={`${script.className} relative text-[28px] leading-none`}
-            style={{ color: "var(--brand-dark)" }}
-          >
-            Terima Kasih
-          </p>
-          <p className="relative mt-2.5 flex items-center justify-center gap-3 text-[12px] font-medium text-[#132320]/62">
-            <span className="h-px w-8 bg-[#132320]/15" />
-            Atas dukungan Anda
-            <span className="h-px w-8 bg-[#132320]/15" />
-          </p>
+          {SHOW_FOOTER_THANKS && (
+            <p className="relative text-[12px] font-medium tracking-[0.01em] text-[#132320]/60">
+              Terima kasih atas dukungan Anda
+            </p>
+          )}
         </div>
       </Card>
     </div>
