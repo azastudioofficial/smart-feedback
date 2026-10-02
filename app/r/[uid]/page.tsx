@@ -4,6 +4,7 @@
 
 import { redirect, notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 type Props = {
   params: Promise<{ uid: string }>;
@@ -80,8 +81,9 @@ export default async function ScanRoutePage({ params, searchParams }: Props) {
   // 4. Paket BASIC: tidak ada halaman feedback / keluhan - pelanggan
   //    langsung dilempar ke Google Review. Scan tetap tercatat di atas.
   if (product.plan !== "pro") {
-    if (product.google_review_url) {
-      redirect(product.google_review_url);
+    const reviewUrl = safeHttpUrl(product.google_review_url);
+    if (reviewUrl) {
+      redirect(reviewUrl);
     }
     return (
       <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-6">
