@@ -435,9 +435,12 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
   // (= klik tombol "Tulis Review di Google Maps") tidak punya policy
   // DELETE untuk admin, jadi pakai service client.
   //
-  // File toko lama (Cloudinary + Storage lama) ikut dihapus, lalu
-  // keluhan lama dan kolom gambar/ikon toko dikosongkan - klien baru
-  // tidak boleh mewarisi keluhan, logo, atau cover klien sebelumnya.
+  // admin_reset_product (SQL) hanya mengosongkan nama toko, link review,
+  // WhatsApp, owner, dan logo - TIDAK menghapus keluhan, cover, ikon
+  // sosial, maupun warna brand. Itu dilengkapi di sini: file toko lama
+  // (Cloudinary + Storage lama) dihapus, lalu keluhan lama dan kolom
+  // tampilan dikosongkan - klien baru tidak boleh mewarisi keluhan,
+  // cover, atau tema klien sebelumnya.
   // Kalau ada file yang gagal dihapus, dicatat dan dicoba lagi cron.
   if (hasAssets(assets)) {
     const { failed, errors } = await purgeAssets(service, assets);
@@ -460,6 +463,9 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
         logo_url: null,
         cover_image_url: null,
         cover_position: null,
+        brand_color: null,
+        tagline: null,
+        terms_accepted_at: null,
         social_links: [],
       })
       .eq("id", productId),
