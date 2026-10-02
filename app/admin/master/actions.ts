@@ -6,6 +6,8 @@ import {
   createServerSupabase,
   createServiceClient,
 } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth-guards";
+import { safeHttpUrl } from "@/lib/safe-url";
 import {
   collectProductAssets,
   hasAssets,
@@ -153,6 +155,9 @@ export async function generateProducts(
   resellerId: string | null = null,
   plan: Plan = "basic"
 ): Promise<{ success: boolean; data?: GeneratedItem[]; error?: string }> {
+  const guard = await requireRole(["super_admin"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
 
   const { data, error } = await supabase.rpc("admin_generate_products", {
@@ -316,6 +321,9 @@ export async function toggleSuspend(
   productId: string,
   suspend: boolean
 ): Promise<ActionResult> {
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
 
   const { error } = await supabase
@@ -342,14 +350,25 @@ export async function overrideProduct(
     ownerWhatsapp: string;
   }
 ): Promise<ActionResult> {
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const reviewUrl = safeHttpUrl(data.googleReviewUrl);
+  if (!reviewUrl) {
+    return {
+      success: false,
+      error: "Link Google Review tidak valid (harus diawali http:// atau https://).",
+    };
+  }
+
   const supabase = await createServerSupabase();
 
   const { error } = await supabase
     .from("products")
     .update({
-      business_name: data.businessName,
-      google_review_url: data.googleReviewUrl,
-      owner_whatsapp: data.ownerWhatsapp,
+      business_name: data.businessName.trim().slice(0, 120),
+      google_review_url: reviewUrl,
+      owner_whatsapp: data.ownerWhatsapp.trim().slice(0, 30),
     })
     .eq("id", productId);
 
@@ -358,7 +377,10 @@ export async function overrideProduct(
     return { success: false, error: "Gagal menyimpan perubahan." };
   }
 
-  await logAdminAction(supabase, productId, "override_edit", data);
+  await logAdminAction(supabase, productId, "override_edit", {
+    ...data,
+    googleReviewUrl: reviewUrl,
+  });
   revalidatePath("/admin/master");
   revalidatePath("/reseller");
   return { success: true };
@@ -379,6 +401,9 @@ export async function overrideProduct(
  * persis polanya dengan deleteProduct() di bawah.
  */
 export async function resetAndUnbind(productId: string): Promise<ActionResult> {
+  const guard = await requireRole(["super_admin"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
   const service = createServiceClient();
 
@@ -509,6 +534,9 @@ export async function deleteProduct(
   productId: string,
   shortCode: string
 ): Promise<ActionResult> {
+  const guard = await requireRole(["super_admin"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const supabase = await createServerSupabase();
   const service = createServiceClient();
 
@@ -626,6 +654,11 @@ export async function createReseller(
   password: string,
   name: string
 ): Promise<ActionResult> {
+  // WAJIB: tanpa ini siapa pun yang login (termasuk pelanggan yang baru
+  // daftar lewat form aktivasi) bisa membuat akun reseller.
+  const guard = await requireRole(["super_admin"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const service = createServiceClient();
 
   const { data, error } = await service.auth.admin.createUser({
@@ -667,6 +700,9 @@ export async function listResellers(): Promise<{
   data?: { id: string; name: string; card_count: number }[];
   error?: string;
 }> {
+  const guard = await requireRole(["super_admin"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
   const service = createServiceClient();
 
   const { data: resellers, error } = await service
