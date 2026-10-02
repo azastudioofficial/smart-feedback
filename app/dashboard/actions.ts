@@ -99,6 +99,8 @@ export async function updateSettings(
     coverPosition?: string;
     brandColor?: string;
     socialLinks?: SocialLink[];
+    connectTitle?: string;
+    connectDescription?: string;
   }
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
@@ -160,6 +162,20 @@ export async function updateSettings(
         label: link.label ? String(link.label).slice(0, 60) : link.label,
         icon_url: isAllowedCloudinaryUrl(link.icon_url) ? link.icon_url : null,
       }));
+  }
+
+  // Judul & keterangan tombol "Terhubung dengan Kami". undefined = tidak
+  // diubah; string kosong = dihapus (kembali ke teks bawaan). Dibatasi
+  // panjangnya di server, dan spasi/baris baru dirapikan jadi 1 spasi.
+  const cleanText = (v: string, max: number): string | null => {
+    const t = v.replace(/\s+/g, " ").trim().slice(0, max);
+    return t || null;
+  };
+  if (typeof data.connectTitle === "string") {
+    updatePayload.connect_title = cleanText(data.connectTitle, 60);
+  }
+  if (typeof data.connectDescription === "string") {
+    updatePayload.connect_description = cleanText(data.connectDescription, 140);
   }
 
   const { error } = await supabase
