@@ -37,7 +37,7 @@ const getProduct = cache(async (id: string) => {
   const supabase = createServiceClient();
   return supabase
     .from("products")
-    .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, social_links, is_active, is_suspended, plan")
+    .select("id, business_name, google_review_url, logo_url, cover_image_url, cover_position, brand_color, social_links, connect_title, connect_description, is_active, is_suspended, plan")
     .eq("id", id)
     .maybeSingle();
 });
