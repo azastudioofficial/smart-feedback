@@ -25,7 +25,7 @@ function ownCloudName(): string | null {
  */
 export function isAllowedCloudinaryUrl(
   url: string | null | undefined
-): url is string {
+): boolean {
   if (!url || typeof url !== "string" || url.length > 2000) return false;
   const cloud = ownCloudName();
   if (!cloud) return false;
@@ -74,6 +74,6 @@ export function safeHttpUrl(raw: string | null | undefined): string | null {
 }
 
 /** Versi ringan untuk dipakai di komponen client sebelum redirect. */
-export function isHttpUrl(raw: string | null | undefined): raw is string {
+export function isHttpUrl(raw: string | null | undefined): boolean {
   return typeof raw === "string" && /^https?:\/\//i.test(raw.trim());
 }
