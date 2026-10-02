@@ -49,6 +49,8 @@ type Product = {
   cover_position: string | null;
   brand_color: string | null;
   social_links?: SocialLink[] | null;
+  connect_title?: string | null;
+  connect_description?: string | null;
 };
 
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
@@ -181,6 +183,13 @@ export function SettingsForm({
 
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>(
     product.social_links ?? []
+  );
+
+  // Judul & keterangan tombol "Terhubung dengan Kami" (opsional).
+  // Kosong = pelanggan melihat teks bawaan yang netral.
+  const [connectTitle, setConnectTitle] = useState(product.connect_title ?? "");
+  const [connectDescription, setConnectDescription] = useState(
+    product.connect_description ?? ""
   );
 
   function handleAddSocialLink() {
@@ -435,6 +444,9 @@ export function SettingsForm({
         coverPosition: coverPreview ? `${coverPosX}% ${coverPosY}%` : undefined,
         brandColor,
         socialLinks,
+        // Hanya Pro yang punya bagian ini; di Basic jangan menimpa nilai lama.
+        connectTitle: isPro ? connectTitle : undefined,
+        connectDescription: isPro ? connectDescription : undefined,
       });
 
       if (!result.success) {
@@ -730,6 +742,42 @@ export function SettingsForm({
             ikon di kiri tiap tautan kalau mau pakai gambar/logo
             sendiri, bukan ikon bawaan.
           </p>
+
+          {/* Teks tombol yang dilihat pelanggan - bebas diketik sendiri
+              supaya cocok dengan jenis usaha (hotel, salon, toko, dst). */}
+          <div className="mt-3 space-y-2.5 rounded-xl border border-black/[0.07] bg-white p-3">
+            <div>
+              <Label htmlFor="connectTitle" className="text-xs">
+                Judul tombol
+              </Label>
+              <Input
+                id="connectTitle"
+                value={connectTitle}
+                onChange={(e) => setConnectTitle(e.target.value)}
+                maxLength={60}
+                placeholder="Terhubung dengan Kami"
+                className="mt-1 h-11 bg-white text-sm"
+              />
+            </div>
+            <div>
+              <Label htmlFor="connectDescription" className="text-xs">
+                Keterangan singkat
+              </Label>
+              <Input
+                id="connectDescription"
+                value={connectDescription}
+                onChange={(e) => setConnectDescription(e.target.value)}
+                maxLength={140}
+                placeholder="Katalog, website, media sosial, dan tautan lainnya dari kami."
+                className="mt-1 h-11 bg-white text-sm"
+              />
+              <p className="mt-1 text-[11px] text-[#132320]/45">
+                Contoh hotel: &quot;Info Kamar &amp; Fasilitas&quot; /
+                &quot;Lihat tipe kamar, fasilitas, dan promo menginap.&quot;
+                Kosongkan untuk memakai teks bawaan.
+              </p>
+            </div>
+          </div>
 
           <input
             ref={iconFileInputRef}
