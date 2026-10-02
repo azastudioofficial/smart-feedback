@@ -6,6 +6,12 @@ import {
   createServerSupabase,
   createServiceClient,
 } from "@/lib/supabase/server";
+import {
+  collectProductAssets,
+  hasAssets,
+  purgeAssets,
+  recordPendingCleanup,
+} from "@/lib/asset-cleanup";
 
 type ActionResult = { success: boolean; error?: string };
 
@@ -387,6 +393,11 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
   const ownerId = (productRow as { owner_id: string | null } | null)
     ?.owner_id;
 
+  // Kumpulkan SEMUA file toko ini (logo, cover, ikon custom, foto
+  // keluhan) SEBELUM reset - setelah reset petunjuknya hilang dan
+  // file di Cloudinary jadi yatim selamanya.
+  const assets = await collectProductAssets(service, productId);
+
   const { error } = await supabase.rpc("admin_reset_product", {
     p_product_id: productId,
   });
@@ -423,16 +434,42 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
   // tetap tinggal (angka Scan tidak berubah). scan_logs & positive_clicks
   // (= klik tombol "Tulis Review di Google Maps") tidak punya policy
   // DELETE untuk admin, jadi pakai service client.
-  const [scanDel, clickDel, lastScanReset] = await Promise.all([
+  //
+  // File toko lama (Cloudinary + Storage lama) ikut dihapus, lalu
+  // keluhan lama dan kolom gambar/ikon toko dikosongkan - klien baru
+  // tidak boleh mewarisi keluhan, logo, atau cover klien sebelumnya.
+  // Kalau ada file yang gagal dihapus, dicatat dan dicoba lagi cron.
+  if (hasAssets(assets)) {
+    const { failed, errors } = await purgeAssets(service, assets);
+    await recordPendingCleanup(
+      service,
+      `reset_product:${productId}`,
+      failed,
+      errors
+    );
+  }
+
+  const [scanDel, clickDel, feedbackDel, lastScanReset] = await Promise.all([
     service.from("scan_logs").delete().eq("product_id", productId),
     service.from("positive_clicks").delete().eq("product_id", productId),
+    service.from("feedbacks").delete().eq("product_id", productId),
     service
       .from("products")
-      .update({ last_scanned_at: null })
+      .update({
+        last_scanned_at: null,
+        logo_url: null,
+        cover_image_url: null,
+        cover_position: null,
+        social_links: [],
+      })
       .eq("id", productId),
   ]);
 
-  const statsError = scanDel.error ?? clickDel.error ?? lastScanReset.error;
+  const statsError =
+    scanDel.error ??
+    clickDel.error ??
+    feedbackDel.error ??
+    lastScanReset.error;
   if (statsError) {
     console.error("Produk sudah direset, tapi gagal mengosongkan statistik:", statsError.message);
     revalidatePath("/admin/master");
@@ -484,6 +521,11 @@ export async function deleteProduct(
   const ownerId = (productRow as { owner_id: string | null } | null)
     ?.owner_id;
 
+  // Kumpulkan SEMUA file toko ini SEBELUM baris dihapus - ON DELETE
+  // CASCADE ikut membuang baris keluhannya, dan setelah itu tidak ada
+  // lagi petunjuk untuk menemukan fotonya di Cloudinary.
+  const assets = await collectProductAssets(service, productId);
+
   const { error } = await supabase
     .from("products")
     .delete()
@@ -520,6 +562,20 @@ export async function deleteProduct(
         );
       }
     }
+  }
+
+  // Hapus file-filenya SETELAH baris terhapus (bukan sebelum): kalau
+  // penghapusan baris ditolak (mis. RLS), file toko tidak boleh sudah
+  // terlanjur hilang. Yang gagal dihapus dicatat dan dicoba lagi oleh
+  // cron harian, jadi tidak jadi file yatim.
+  if (hasAssets(assets)) {
+    const { failed, errors } = await purgeAssets(service, assets);
+    await recordPendingCleanup(
+      service,
+      `delete_product:${shortCode}`,
+      failed,
+      errors
+    );
   }
 
   revalidatePath("/admin/master");
