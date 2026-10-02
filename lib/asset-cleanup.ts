@@ -14,6 +14,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
+import { isAllowedCloudinaryUrl } from "@/lib/safe-url";
 
 type Service = ReturnType<typeof createServiceClient>;
 
@@ -46,7 +47,9 @@ export function publicIdsFromUrls(
 ): string[] {
   const ids = new Set<string>();
   for (const url of urls) {
-    if (!url || !url.includes(CLOUDINARY_HOST)) continue;
+    // Hanya URL Cloudinary MILIK KITA (cloud name dicek) - URL palsu yang
+    // menyelipkan nama file toko lain tidak boleh ikut terhapus.
+    if (!url || !isAllowedCloudinaryUrl(url)) continue;
     const id = extractCloudinaryPublicId(url);
     if (id) ids.add(id);
   }
