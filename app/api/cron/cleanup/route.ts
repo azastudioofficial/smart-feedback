@@ -58,6 +58,20 @@ async function logCronRun(
   });
 }
 
+/** Bandingkan token tanpa bocor lewat selisih waktu (timing attack). */
+function tokensMatch(provided: string, expected: string): boolean {
+  const enc = new TextEncoder();
+  const a = enc.encode(provided);
+  const b = enc.encode(expected);
+  // Panjang beda -> tetap jalankan loop supaya waktunya tidak informatif.
+  let diff = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 async function handleCleanup(request: NextRequest) {
   // 1. Verifikasi secret token - WAJIB, supaya endpoint ini tidak bisa
   //    dipanggil sembarang orang untuk menghapus data secara massal.
@@ -72,7 +86,7 @@ async function handleCleanup(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const providedToken = authHeader?.replace(/^Bearer\s+/i, "");
 
-  if (providedToken !== secret) {
+  if (!providedToken || !tokensMatch(providedToken, secret)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
