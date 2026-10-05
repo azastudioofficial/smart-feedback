@@ -50,6 +50,7 @@ import {
   type InventoryFilters,
 } from "./actions";
 import { QrPrintDialog } from "@/components/qr-print-dialog";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 type Product = {
   id: string;
@@ -719,9 +720,9 @@ export function InventoryTable({
                   </TableCell>
                 )}
                 <TableCell>
-                  {p.google_review_url ? (
+                  {safeHttpUrl(p.google_review_url) ? (
                     <a
-                      href={p.google_review_url}
+                      href={safeHttpUrl(p.google_review_url) as string}
                       target="_blank"
                       rel="noreferrer"
                       className="text-[#0E7C86] underline underline-offset-2"
@@ -807,9 +808,9 @@ export function InventoryTable({
 
             <CardUrlLink code={p.short_code} className="text-xs" />
 
-            {p.google_review_url && (
+            {safeHttpUrl(p.google_review_url) && (
               <a
-                href={p.google_review_url}
+                href={safeHttpUrl(p.google_review_url) as string}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-[#0E7C86] underline underline-offset-2"
