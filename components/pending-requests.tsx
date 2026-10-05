@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { approveActivation, rejectActivation } from "@/app/actions/activation";
+import { safeHttpUrl } from "@/lib/safe-url";
 
 type PendingProduct = {
   id: string;
@@ -88,12 +89,12 @@ export function PendingRequests({
               </p>
               <p className="text-xs text-[#132320]/50">
                 WA: {p.owner_whatsapp || "-"}
-                {p.google_review_url && (
+                {safeHttpUrl(p.google_review_url) && (
                   <>
                     {" "}
                     &middot;{" "}
                     <a
-                      href={p.google_review_url}
+                      href={safeHttpUrl(p.google_review_url) as string}
                       target="_blank"
                       rel="noreferrer"
                       className="underline"
