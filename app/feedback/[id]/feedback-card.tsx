@@ -41,12 +41,24 @@ import {
   cloudinaryThumbnail,
 } from "@/lib/utils";
 import { submitFeedback, logPositiveClick } from "./actions";
+import { safeHttpUrl } from "@/lib/safe-url";
 import {
   SOCIAL_PLATFORM_META,
   socialLinkDisplayLabel,
   splitSocialLinksByGroup,
   type SocialLink,
 } from "@/lib/social-links";
+
+// Tautan "Terhubung dengan Kami" berasal dari database dan bisa ditulis
+// owner lewat jalur selain form pengaturan. Hanya URL http/https yang valid
+// yang boleh jadi href - sisanya (mis. "javascript:...") dibuang di sini,
+// sebelum sampai ke komponen mana pun.
+function onlySafeLinks(links: SocialLink[] | null | undefined): SocialLink[] {
+  return (links ?? []).flatMap((l) => {
+    const url = safeHttpUrl(l?.url);
+    return url ? [{ ...l, url }] : [];
+  });
+}
 
 type Product = {
   id: string;
@@ -1182,7 +1194,7 @@ export function FeedbackCard({ product }: { product: Product }) {
           )}
 
           {step === "choice" && (
-            <ConnectWithUs links={product.social_links ?? []} product={product} />
+            <ConnectWithUs links={onlySafeLinks(product.social_links)} product={product} />
           )}
         </CardContent>
 
