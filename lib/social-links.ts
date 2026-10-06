@@ -10,18 +10,25 @@
 // owner bisa tambah/hapus/urutkan tautan sesuka mereka tanpa perlu
 // migrasi kolom baru tiap kali ada platform baru.
 
+import type { ComponentType, CSSProperties } from "react";
 import {
-  Camera,
-  ThumbsUp,
-  PlayCircle,
-  Globe,
-  ShoppingBag,
-  BookOpen,
-  Music2,
-  MessageCircle,
-  Link2,
-  type LucideIcon,
-} from "lucide-react";
+  InstagramIcon,
+  TikTokIcon,
+  FacebookIcon,
+  YouTubeIcon,
+  WhatsAppIcon,
+  ShopeeIcon,
+  GlobeSolidIcon,
+  ProductsSolidIcon,
+  LinkSolidIcon,
+} from "@/components/brand-icons";
+
+// Tipe ikon platform - semua ikon (logo merek & ikon solid umum) berasal
+// dari components/brand-icons.tsx dan memenuhi bentuk ini.
+export type PlatformIcon = ComponentType<{
+  className?: string;
+  style?: CSSProperties;
+}>;
 
 export type SocialPlatform =
   | "instagram"
@@ -55,59 +62,59 @@ export type SocialLink = {
 
 export const SOCIAL_PLATFORM_META: Record<
   SocialPlatform,
-  { label: string; icon: LucideIcon; color: string; placeholder: string }
+  { label: string; icon: PlatformIcon; color: string; placeholder: string }
 > = {
   instagram: {
     label: "Instagram",
-    icon: Camera,
+    icon: InstagramIcon,
     color: "#C13584",
     placeholder: "https://instagram.com/nama-toko",
   },
   tiktok: {
     label: "TikTok",
-    icon: Music2,
+    icon: TikTokIcon,
     color: "#000000",
     placeholder: "https://tiktok.com/@nama-toko",
   },
   shopee: {
     label: "Shopee",
-    icon: ShoppingBag,
+    icon: ShopeeIcon,
     color: "#EE4D2D",
     placeholder: "https://shopee.co.id/nama-toko",
   },
   website: {
     label: "Website",
-    icon: Globe,
+    icon: GlobeSolidIcon,
     color: "#0E7C86",
     placeholder: "https://tokokamu.com",
   },
   catalog: {
     label: "Katalog Produk",
-    icon: BookOpen,
+    icon: ProductsSolidIcon,
     color: "#B45309",
     placeholder: "https://drive.google.com/... atau link katalog PDF",
   },
   facebook: {
     label: "Facebook",
-    icon: ThumbsUp,
+    icon: FacebookIcon,
     color: "#1877F2",
     placeholder: "https://facebook.com/nama-toko",
   },
   youtube: {
     label: "YouTube",
-    icon: PlayCircle,
+    icon: YouTubeIcon,
     color: "#FF0000",
     placeholder: "https://youtube.com/@nama-toko",
   },
   whatsapp: {
     label: "WhatsApp",
-    icon: MessageCircle,
+    icon: WhatsAppIcon,
     color: "#25D366",
     placeholder: "https://wa.me/62812xxxxxxx",
   },
   other: {
     label: "Lainnya",
-    icon: Link2,
+    icon: LinkSolidIcon,
     color: "#132320",
     placeholder: "https://...",
   },
