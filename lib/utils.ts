@@ -302,9 +302,20 @@ export function buildWhatsappMessage(params: {
  * (hapus spasi/simbol, pastikan diawali kode negara 62).
  */
 export function buildWhatsappUrl(rawPhone: string, message: string): string {
-  let phone = rawPhone.replace(/[^0-9]/g, "");
-  if (phone.startsWith("0")) {
+  const trimmed = rawPhone.trim();
+  let phone = trimmed.replace(/[^0-9]/g, "");
+
+  if (trimmed.startsWith("+")) {
+    // Sudah format internasional (+62..., +60..., dst) - biarkan apa adanya.
+  } else if (phone.startsWith("00")) {
+    // 0062812... -> 62812...
+    phone = phone.slice(2);
+  } else if (phone.startsWith("0")) {
+    // 0812... -> 62812...
     phone = "62" + phone.slice(1);
+  } else if (phone.startsWith("8")) {
+    // 812... (tanpa 0 / 62) -> 62812...
+    phone = "62" + phone;
   }
   return `https://wa.me/${phone}?text=${message}`;
 }
