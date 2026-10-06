@@ -26,7 +26,6 @@ import {
   updateSettings,
   removeLogo,
   removeCoverImage,
-  removeSocialIcon,
 } from "./actions";
 import { useStore } from "./store-context";
 import {
@@ -200,10 +199,8 @@ export function SettingsForm({
   }
 
   function handleRemoveSocialLink(id: string) {
-    const link = socialLinks.find((l) => l.id === id);
-    if (link?.icon_url) {
-      removeSocialIcon(link.icon_url);
-    }
+    // File ikon lama dibersihkan server SETELAH Simpan berhasil
+    // (lihat updateSettings), bukan di sini.
     setSocialLinks((prev) => prev.filter((link) => link.id !== id));
   }
 
@@ -273,9 +270,6 @@ export function SettingsForm({
       return;
     }
 
-    const previousIconUrl = socialLinks.find((l) => l.id === targetId)
-      ?.icon_url;
-
     setUploadingIconId(targetId);
     try {
       // compressIconImage (bukan compressComplaintPhoto) - khusus
@@ -291,11 +285,8 @@ export function SettingsForm({
           link.id === targetId ? { ...link, icon_url: uploadedUrl } : link
         )
       );
-      // Bersihkan ikon lama di Cloudinary (best-effort, tidak
-      // memblokir UI kalau gagal - lihat removeSocialIcon()).
-      if (previousIconUrl) {
-        removeSocialIcon(previousIconUrl);
-      }
+      // Ikon lama yang diganti dibersihkan server setelah Simpan berhasil
+      // (lihat updateSettings).
     } catch (err) {
       alert(
         err instanceof Error ? err.message : "Gagal mengupload ikon custom."
@@ -309,7 +300,6 @@ export function SettingsForm({
   function handleRemoveCustomIcon(id: string) {
     const link = socialLinks.find((l) => l.id === id);
     if (!link?.icon_url) return;
-    removeSocialIcon(link.icon_url);
     setSocialLinks((prev) =>
       prev.map((l) => (l.id === id ? { ...l, icon_url: null } : l))
     );
