@@ -83,6 +83,36 @@ async function deleteCloudinaryImage(publicId: string): Promise<void> {
   );
 }
 
+/** Daftar icon_url (tidak kosong) dari isi kolom social_links. */
+function iconUrlsOf(links: unknown): string[] {
+  if (!Array.isArray(links)) return [];
+  return links
+    .map((l) => (l as { icon_url?: string | null } | null)?.icon_url)
+    .filter((u): u is string => typeof u === "string" && u.length > 0);
+}
+
+/**
+ * true = ikon ini masih dipakai toko LAIN (atau pengecekan gagal) - jangan
+ * dihapus dari Cloudinary. Gagal-aman: kalau ragu, file dibiarkan.
+ */
+async function iconUsedByOtherStore(
+  url: string,
+  productId: string
+): Promise<boolean> {
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("products")
+    .select("id")
+    .contains("social_links", [{ icon_url: url }])
+    .neq("id", productId)
+    .limit(1);
+  if (error) {
+    console.error("Gagal cek pemakaian ikon:", error.message);
+    return true;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 /**
  * Update pengaturan toko. Pakai client yang IKUT SESI LOGIN (bukan
  * service client) supaya RLS "owner_update_own_product" yang menentukan
@@ -178,6 +208,18 @@ export async function updateSettings(
     updatePayload.connect_description = cleanText(data.connectDescription, 140);
   }
 
+  // Ikon custom yang tersimpan SEKARANG - dibaca sebelum update, supaya
+  // setelah berhasil tersimpan kita tahu ikon mana yang sudah tidak dipakai.
+  let oldIconUrls: string[] = [];
+  if (data.socialLinks) {
+    const { data: current } = await supabase
+      .from("products")
+      .select("social_links")
+      .eq("id", productId)
+      .maybeSingle();
+    oldIconUrls = iconUrlsOf(current?.social_links);
+  }
+
   const { error } = await supabase
     .from("products")
     .update(updatePayload)
@@ -186,6 +228,26 @@ export async function updateSettings(
   if (error) {
     console.error("Gagal update settings:", error.message);
     return { success: false, error: "Gagal menyimpan pengaturan." };
+  }
+
+  // Pengaturan SUDAH tersimpan -> baru bersihkan file ikon lama yang diganti
+  // atau dihapus (best-effort). Sebelumnya file dihapus langsung saat owner
+  // menekan tombol ganti/hapus, sebelum Simpan - kalau halaman ditutup tanpa
+  // menyimpan, database masih menunjuk ke file yang sudah hilang.
+  if (data.socialLinks) {
+    const kept = new Set(iconUrlsOf(updatePayload.social_links));
+    for (const url of oldIconUrls) {
+      if (kept.has(url) || !isAllowedCloudinaryUrl(url)) continue;
+      if (await iconUsedByOtherStore(url, productId)) continue;
+      const publicId = extractCloudinaryPublicId(url);
+      if (!publicId) continue;
+      try {
+        await deleteCloudinaryImage(publicId);
+      } catch (err) {
+        console.error("Gagal hapus ikon lama dari Cloudinary:", err);
+        // Tidak fatal - pengaturan sudah tersimpan.
+      }
+    }
   }
 
   return { success: true };
