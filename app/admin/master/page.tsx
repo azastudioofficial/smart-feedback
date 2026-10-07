@@ -88,6 +88,7 @@ export default async function AdminMasterPage() {
       id: "semua-kartu",
       label: "Semua Kartu",
       icon: "cards",
+      wide: true,
       content: (
         <InventoryTable
           products={inventoryItems}
