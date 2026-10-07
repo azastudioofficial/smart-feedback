@@ -852,9 +852,10 @@ export function InventoryTable({
           }`}
         >
           {/* ===== Tampilan TABEL - lg ke atas. Kolom dirapatkan jadi 5
-              (Kartu, Toko, Status, Scan, Aksi): ID + link kartu jadi satu,
+              (+ Scan Terakhir): ID + link kartu jadi satu,
               reseller & link review ikut di bawah nama toko, paket ikut
-              di kolom status, scan terakhir ikut di bawah jumlah scan.
+              di kolom status. Scan terakhir tampil lengkap (waktu relatif
+              + tanggal & jam).
               Di layar sempit dipakai tampilan kartu di bawah. ===== */}
           <div className="hidden lg:block">
             <Table>
@@ -875,6 +876,7 @@ export function InventoryTable({
                   <TableHead className={TH}>Toko</TableHead>
                   <TableHead className={TH}>Status</TableHead>
                   <TableHead className={TH}>Scan</TableHead>
+                  <TableHead className={TH}>Scan Terakhir</TableHead>
                   <TableHead className={`${TH} text-right`}>Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -943,16 +945,14 @@ export function InventoryTable({
                           <PlanBadge p={p} />
                         </div>
                       </TableCell>
+                      <TableCell
+                        className="px-3 py-3 font-semibold tabular-nums text-[#132320]"
+                        style={MONO}
+                      >
+                        {scanCounts[p.id] ?? 0}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap px-3 py-3">
-                        <p
-                          className="font-semibold tabular-nums text-[#132320]"
-                          style={MONO}
-                        >
-                          {scanCounts[p.id] ?? 0}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[#132320]/50">
-                          <LastScan iso={p.last_scanned_at} compact />
-                        </p>
+                        <LastScan iso={p.last_scanned_at} />
                       </TableCell>
                       <TableCell className="px-3 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -1015,6 +1015,12 @@ export function InventoryTable({
               </span>
               <span>
                 Scan terakhir: <LastScan iso={p.last_scanned_at} compact />
+                {p.last_scanned_at && (
+                  <span suppressHydrationWarning>
+                    {" "}
+                    &middot; {formatAbsolute(p.last_scanned_at)}
+                  </span>
+                )}
               </span>
               {showResellerColumn && (
                 <span>Reseller: {p.reseller_name || "-"}</span>
