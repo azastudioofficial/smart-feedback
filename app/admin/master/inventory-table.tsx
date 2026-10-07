@@ -36,6 +36,7 @@ import {
   Crown,
   Search,
   X,
+  CheckCircle2,
 } from "lucide-react";
 import {
   toggleSuspend,
@@ -45,6 +46,8 @@ import {
   getInventoryPage,
   setPlan,
   setPlanByCodes,
+  setStockActivation,
+  setStockActivationByFilter,
   listResellers,
   type Plan,
   type InventoryFilters,
@@ -61,6 +64,7 @@ type Product = {
   is_active: boolean;
   is_suspended: boolean;
   pending_review?: boolean;
+  stock_activated?: boolean;
   plan?: Plan;
   reseller_name?: string | null;
   created_at: string;
@@ -173,6 +177,18 @@ function StatusBadge({ p }: { p: Product }) {
   if (p.is_active) {
     return <Badge className="bg-[#0E7C86] hover:bg-[#0B5F67]">Aktif</Badge>;
   }
+  // Kartu kosong yang sudah ditandai "stok aktif": pembeli yang
+  // mengaktivasinya langsung aktif, tanpa menunggu persetujuan.
+  if (p.stock_activated) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-[#0E7C86]/50 bg-[#E4F1F1] text-[#0E7C86]"
+      >
+        Stok Aktif
+      </Badge>
+    );
+  }
   return (
     <Badge variant="outline" className="border-[#B45309]/40 text-[#B45309]">
       Stok Siap
@@ -203,6 +219,7 @@ export function InventoryTable({
   showResellerColumn = false,
   allowDelete = true,
   allowPlanChange = false,
+  allowStockActivation = true,
 }: {
   products: Product[];
   scanCounts: Record<string, number>;
@@ -210,6 +227,8 @@ export function InventoryTable({
   showResellerColumn?: boolean;
   allowDelete?: boolean;
   allowPlanChange?: boolean;
+  // Tombol "Aktifkan Stok" (aktivasi tanpa persetujuan) - admin & reseller.
+  allowStockActivation?: boolean;
 }) {
   const [items, setItems] = useState(products);
   // Salinan lokal supaya angka Scan bisa langsung jadi 0 setelah Reset.
@@ -378,6 +397,85 @@ export function InventoryTable({
     if (!result.notFound?.length) setCodesText("");
   }
 
+  // Checkbox pilih-kartu dipakai bersama oleh aksi paket (admin) dan
+  // aksi stok aktif (admin & reseller).
+  const showSelect = allowPlanChange || allowStockActivation;
+
+  async function applyStock(ids: string[], activate: boolean) {
+    setBulkBusy(true);
+    const result = await setStockActivation(ids, activate);
+    setBulkBusy(false);
+
+    if (!result.success) {
+      alert(result.error ?? "Gagal mengubah status stok.");
+      return;
+    }
+    if (result.skipped) {
+      alert(
+        `${result.updated ?? 0} kartu diproses. ${result.skipped} kartu dilewati karena ${
+          activate
+            ? "bukan kartu kosong (sudah aktif, menunggu persetujuan, atau ditangguhkan)"
+            : "tidak sedang bertanda stok aktif"
+        }.`
+      );
+    }
+    setSelected(new Set());
+    await loadWithFilters(1);
+  }
+
+  async function handleRowStock(p: Product) {
+    const next = !p.stock_activated;
+    setBusyId(p.id);
+    const result = await setStockActivation([p.id], next);
+    setBusyId(null);
+
+    if (!result.success || !result.updated) {
+      alert(
+        result.error ?? "Kartu ini tidak bisa diubah (bukan kartu kosong)."
+      );
+      return;
+    }
+    setItems((prev) =>
+      prev.map((it) => (it.id === p.id ? { ...it, stock_activated: next } : it))
+    );
+  }
+
+  async function handleStockByFilter(activate: boolean) {
+    const resellerName = resellerOptions.find(
+      (r) => r.id === resellerFilter
+    )?.name;
+    const scope = [
+      resellerName ? `reseller "${resellerName}"` : null,
+      search ? `pencarian "${search}"` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const ok = confirm(
+      activate
+        ? `Aktifkan stok untuk ${total} kartu kosong${scope ? ` (${scope})` : ""}?\n\nPembeli yang mengaktivasi kartu ini akan LANGSUNG aktif tanpa menunggu persetujuan.`
+        : `Batalkan stok aktif untuk ${total} kartu${scope ? ` (${scope})` : ""}?\n\nKartu kembali ke alur permohonan aktivasi.`
+    );
+    if (!ok) return;
+
+    setBulkBusy(true);
+    const result = await setStockActivationByFilter(
+      { search, resellerId: resellerFilter },
+      activate
+    );
+    setBulkBusy(false);
+
+    if (!result.success) {
+      alert(result.error ?? "Gagal mengubah status stok.");
+      return;
+    }
+    alert(
+      `${result.updated ?? 0} kartu ${
+        activate ? "diaktifkan stoknya" : "dibatalkan stok aktifnya"
+      }.`
+    );
+    await loadWithFilters(1);
+  }
+
   function handlePrintQr(p: Product) {
     setPrintingCode(p.short_code);
   }
@@ -501,6 +599,14 @@ export function InventoryTable({
                 : "Upgrade ke Pro"}
             </DropdownMenuItem>
           )}
+          {allowStockActivation &&
+            !p.is_active &&
+            !p.pending_review &&
+            !p.is_suspended && (
+              <DropdownMenuItem onClick={() => handleRowStock(p)}>
+                {p.stock_activated ? "Batalkan Stok Aktif" : "Aktifkan Stok"}
+              </DropdownMenuItem>
+            )}
           <DropdownMenuItem onClick={() => handleToggleSuspend(p)}>
             {p.is_suspended ? "Unsuspend" : "Suspend"}
           </DropdownMenuItem>
@@ -604,6 +710,7 @@ export function InventoryTable({
           <option value="">Semua Status</option>
           <option value="aktif">Aktif</option>
           <option value="stok_siap">Stok Siap</option>
+          <option value="stok_aktif">Stok Aktif</option>
           <option value="menunggu">Menunggu Persetujuan</option>
           <option value="suspended">Suspended</option>
         </select>
@@ -619,6 +726,24 @@ export function InventoryTable({
           </Button>
         )}
 
+        {allowStockActivation &&
+          total > 0 &&
+          (statusFilter === "stok_siap" || statusFilter === "stok_aktif") && (
+            <Button
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={() => handleStockByFilter(statusFilter === "stok_siap")}
+              className="h-11 gap-2 border-[#0E7C86]/40 text-[#0E7C86]"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {bulkBusy
+                ? "Memproses..."
+                : statusFilter === "stok_siap"
+                  ? `Aktifkan stok semua (${total})`
+                  : `Batalkan stok aktif semua (${total})`}
+            </Button>
+          )}
+
         {filtersActive && (
           <span className="w-full text-sm text-[#132320]/55">
             Menampilkan {total} kartu yang cocok dengan filter.
@@ -626,27 +751,51 @@ export function InventoryTable({
         )}
       </div>
 
-      {allowPlanChange && selected.size > 0 && (
+      {showSelect && selected.size > 0 && (
         <div className="mx-5 mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[#0E7C86]/25 bg-[#E4F1F1] p-3">
           <span className="mr-auto text-sm font-semibold text-[#132320]">
             {selected.size} kartu dipilih
           </span>
-          <Button
-            disabled={bulkBusy}
-            onClick={() => handleBulkPlan("pro")}
-            className="h-11 gap-2 bg-[#0E7C86] hover:bg-[#0B5F67]"
-          >
-            <Crown className="h-4 w-4" />
-            {bulkBusy ? "Memproses..." : "Upgrade ke Pro"}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={bulkBusy}
-            onClick={() => handleBulkPlan("basic")}
-            className="h-11 border-[#132320]/20 bg-white"
-          >
-            Turunkan ke Basic
-          </Button>
+          {allowStockActivation && (
+            <>
+              <Button
+                disabled={bulkBusy}
+                onClick={() => applyStock(Array.from(selected), true)}
+                className="h-11 gap-2 bg-[#0E7C86] hover:bg-[#0B5F67]"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {bulkBusy ? "Memproses..." : "Aktifkan Stok"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={bulkBusy}
+                onClick={() => applyStock(Array.from(selected), false)}
+                className="h-11 border-[#132320]/20 bg-white"
+              >
+                Batalkan Stok Aktif
+              </Button>
+            </>
+          )}
+          {allowPlanChange && (
+            <>
+              <Button
+                disabled={bulkBusy}
+                onClick={() => handleBulkPlan("pro")}
+                className="h-11 gap-2 bg-[#0E7C86] hover:bg-[#0B5F67]"
+              >
+                <Crown className="h-4 w-4" />
+                {bulkBusy ? "Memproses..." : "Upgrade ke Pro"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={bulkBusy}
+                onClick={() => handleBulkPlan("basic")}
+                className="h-11 border-[#132320]/20 bg-white"
+              >
+                Turunkan ke Basic
+              </Button>
+            </>
+          )}
           <Button
             variant="ghost"
             disabled={bulkBusy}
@@ -667,7 +816,7 @@ export function InventoryTable({
         <Table>
           <TableHeader>
             <TableRow>
-              {allowPlanChange && (
+              {showSelect && (
                 <TableHead className="w-10">
                   <input
                     type="checkbox"
@@ -693,7 +842,7 @@ export function InventoryTable({
           <TableBody>
             {items.map((p) => (
               <TableRow key={p.id}>
-                {allowPlanChange && (
+                {showSelect && (
                   <TableCell>
                     <input
                       type="checkbox"
@@ -768,7 +917,7 @@ export function InventoryTable({
         {items.map((p) => (
           <div key={p.id} className="space-y-3 p-4">
             <div className="flex items-start justify-between gap-3">
-              {allowPlanChange && (
+              {showSelect && (
                 <input
                   type="checkbox"
                   aria-label={`Pilih kartu ${p.short_code}`}
