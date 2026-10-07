@@ -22,10 +22,13 @@ import {
 
 export function QrPrintDialog({
   shortCode,
+  label,
   open,
   onOpenChange,
 }: {
   shortCode: string | null;
+  /** Label untuk judul & nama file (mis. nomor kartu AZA20001). QR tetap berisi shortCode. */
+  label?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -48,7 +51,7 @@ export function QrPrintDialog({
       );
       const blob = await qr.getRawData(format);
       if (blob) {
-        triggerBlobDownload(blob as Blob, `${shortCode}.${format}`);
+        triggerBlobDownload(blob as Blob, `${label ?? shortCode}.${format}`);
       }
     } finally {
       setLoading(false);
@@ -59,7 +62,7 @@ export function QrPrintDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Cetak QR — {shortCode}</DialogTitle>
+          <DialogTitle>Cetak QR — {label ?? shortCode}</DialogTitle>
         </DialogHeader>
 
         {shortCode && (
