@@ -30,6 +30,10 @@ export type NavSection = {
   // jadi ini tidak mengubah apapun untuk pemanggil yang tidak
   // memakainya (reseller, owner dashboard).
   group?: string;
+  // Opsional - true = area konten selebar layar (max-w-7xl) alih-alih
+  // max-w-5xl. Dipakai tab yang berisi tabel lebar (mis. Semua Kartu).
+  // Tanpa field ini tampilan TIDAK berubah.
+  wide?: boolean;
   content: ReactNode;
 };
 
@@ -112,7 +116,7 @@ export function DashboardShell({
 
       {/* Konten utama */}
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8">
-        <div className="mx-auto max-w-5xl">
+        <div className={`mx-auto ${active?.wide ? "max-w-7xl" : "max-w-5xl"}`}>
           <div className="mb-6 flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
