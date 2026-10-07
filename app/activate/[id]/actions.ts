@@ -18,7 +18,37 @@ type ActivateInput = {
   agreedToTerms: boolean;
 };
 
-type ActivateResult = { success: boolean; error?: string };
+type ActivateResult = {
+  success: boolean;
+  error?: string;
+  /**
+   * true = kartu ini "stok aktif" (sudah disetujui di muka oleh admin/
+   * reseller), jadi langsung aktif tanpa menunggu persetujuan.
+   */
+  autoApproved?: boolean;
+};
+
+/**
+ * Apakah kartu ini sudah diberi tanda "stok aktif" oleh admin/reseller?
+ * Dibaca terpisah & gagal-aman: kalau kolomnya belum ada (SQL 14 belum
+ * dijalankan) atau query gagal, dianggap BELUM aktif -> alur lama
+ * (menunggu persetujuan) tetap jalan seperti biasa.
+ */
+async function isStockActivated(
+  service: ReturnType<typeof createServiceClient>,
+  productId: string
+): Promise<boolean> {
+  const { data, error } = await service
+    .from("products")
+    .select("stock_activated")
+    .eq("id", productId)
+    .maybeSingle();
+  if (error) {
+    console.error("Gagal cek stok aktif:", error.message);
+    return false;
+  }
+  return data?.stock_activated === true;
+}
 
 export async function activateProduct(
   productId: string,
@@ -126,27 +156,73 @@ export async function activateProduct(
     return { success: false, error: "Gagal membuat akun. Coba lagi." };
   }
 
-  // Simpan data toko + hubungkan ke owner, TAPI belum langsung aktif -
-  // status jadi "menunggu persetujuan" reseller/admin yang punya kartu ini.
-  const { error: updateError } = await service
-    .from("products")
-    .update({
-      business_name: businessName,
-      google_review_url: reviewUrl,
-      owner_whatsapp: ownerWhatsapp,
-      owner_id: userId,
-      pending_review: true,
-      terms_accepted_at: new Date().toISOString(),
-    })
-    .eq("id", productId);
+  const shopData = {
+    business_name: businessName,
+    google_review_url: reviewUrl,
+    owner_whatsapp: ownerWhatsapp,
+    owner_id: userId,
+    terms_accepted_at: new Date().toISOString(),
+  };
 
-  if (updateError) {
-    console.error("Gagal update produk saat aktivasi:", updateError.message);
-    // Akun auth sudah terlanjur dibuat tapi produk gagal disimpan -
-    // hapus lagi akunnya supaya emailnya tidak "terjebak" ke akun
-    // kosong yang tidak terhubung ke toko manapun.
+  // JALUR 1 - kartu "stok aktif": sudah disetujui di muka oleh admin/
+  // reseller, jadi langsung aktif tanpa menunggu persetujuan. Tanda
+  // stok aktif dipakai habis (dikembalikan ke false) di update yang sama.
+  // Filter .eq(...) di bawah membuat update ini atomik: kalau kartu
+  // keburu diambil orang lain, atau tandanya baru saja dicabut, tidak ada
+  // baris yang berubah dan kita jatuh ke jalur 2.
+  let autoApproved = false;
+  if (await isStockActivated(service, productId)) {
+    const { data: approvedRows, error: approveError } = await service
+      .from("products")
+      .update({
+        ...shopData,
+        is_active: true,
+        pending_review: false,
+        stock_activated: false,
+      })
+      .eq("id", productId)
+      .eq("is_active", false)
+      .eq("pending_review", false)
+      .eq("stock_activated", true)
+      .select("id");
+
+    if (approveError) {
+      console.error("Gagal aktivasi otomatis:", approveError.message);
+    } else {
+      autoApproved = (approvedRows?.length ?? 0) > 0;
+    }
+  }
+
+  if (autoApproved) {
+    return { success: true, autoApproved: true };
+  }
+
+  // JALUR 2 - alur biasa: simpan data toko + hubungkan ke owner, TAPI
+  // belum langsung aktif - status jadi "menunggu persetujuan"
+  // reseller/admin yang punya kartu ini.
+  const { data: savedRows, error: updateError } = await service
+    .from("products")
+    .update({ ...shopData, pending_review: true })
+    .eq("id", productId)
+    .eq("is_active", false)
+    .eq("pending_review", false)
+    .select("id");
+
+  if (updateError || !savedRows || savedRows.length === 0) {
+    if (updateError) {
+      console.error("Gagal update produk saat aktivasi:", updateError.message);
+    }
+    // Akun auth sudah terlanjur dibuat tapi produk gagal disimpan (atau
+    // kartunya keburu diambil permohonan lain) - hapus lagi akunnya
+    // supaya emailnya tidak "terjebak" ke akun kosong yang tidak
+    // terhubung ke toko manapun.
     await service.auth.admin.deleteUser(userId).catch(() => {});
-    return { success: false, error: "Gagal menyimpan data toko. Coba lagi." };
+    return {
+      success: false,
+      error: updateError
+        ? "Gagal menyimpan data toko. Coba lagi."
+        : "Kartu ini baru saja diaktivasi oleh pengguna lain.",
+    };
   }
 
   return { success: true };
