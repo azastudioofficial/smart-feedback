@@ -53,11 +53,13 @@ import {
   type InventoryFilters,
 } from "./actions";
 import { QrPrintDialog } from "@/components/qr-print-dialog";
+import { formatCardNumber } from "@/lib/card-number";
 import { safeHttpUrl } from "@/lib/safe-url";
 
 type Product = {
   id: string;
   short_code: string;
+  card_seq?: number | null;
   business_name: string | null;
   google_review_url: string | null;
   owner_whatsapp: string | null;
@@ -90,6 +92,11 @@ const STATUS_CHIPS: {
 
 const TH =
   "h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-[#132320]/50";
+
+// Label kartu di layar = nomor internal (AZA20001); kode acak QR (short_code)
+// hanya muncul kecil di bawahnya dan jadi cadangan kalau nomor belum ada.
+const cardLabel = (p: { card_seq?: number | null; short_code: string }) =>
+  formatCardNumber(p.card_seq) ?? p.short_code;
 const PAGE_SIZE = 25;
 
 
@@ -252,6 +259,7 @@ export function InventoryTable({
   const [scanCounts, setScanCounts] = useState(initialScanCounts);
   const [editing, setEditing] = useState<Product | null>(null);
   const [printingCode, setPrintingCode] = useState<string | null>(null);
+  const [printingLabel, setPrintingLabel] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(totalCount ?? products.length);
@@ -370,7 +378,7 @@ export function InventoryTable({
     const next: Plan = (p.plan ?? "pro") === "pro" ? "basic" : "pro";
     if (next === "basic") {
       const ok = confirm(
-        `Turunkan "${p.business_name ?? p.short_code}" ke Basic? Pelanggan yang scan akan langsung ke Google Review dan dasbor owner terkunci. Data lama tidak dihapus.`
+        `Turunkan "${p.business_name ?? cardLabel(p)}" ke Basic? Pelanggan yang scan akan langsung ke Google Review dan dasbor owner terkunci. Data lama tidak dihapus.`
       );
       if (!ok) return;
     }
@@ -495,6 +503,7 @@ export function InventoryTable({
 
   function handlePrintQr(p: Product) {
     setPrintingCode(p.short_code);
+    setPrintingLabel(cardLabel(p));
   }
 
   async function handleToggleSuspend(p: Product) {
@@ -516,7 +525,7 @@ export function InventoryTable({
   async function handleResetUnbind(p: Product) {
     const confirmed = confirm(
       `Kosongkan data toko "${
-        p.business_name ?? p.short_code
+        p.business_name ?? cardLabel(p)
       }"? Akrilik ini akan bisa dijual ke klien baru. Riwayat scan kartu ini juga ikut direset ke 0.`
     );
     if (!confirmed) return;
@@ -551,7 +560,7 @@ export function InventoryTable({
 
   async function handleDelete(p: Product) {
     const confirmed = confirm(
-      `HAPUS PERMANEN "${p.short_code}"${
+      `HAPUS PERMANEN "${cardLabel(p)}"${
         p.business_name ? ` (${p.business_name})` : ""
       }?\n\nSemua riwayat scan & keluhan kartu ini akan ikut terhapus dan TIDAK BISA dikembalikan.`
     );
@@ -684,7 +693,7 @@ export function InventoryTable({
             <Input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Cari nama toko atau ID kartu..."
+              placeholder="Cari nama toko, nomor kartu (AZA20001), atau kode..."
               className="h-11 pl-9"
             />
           </div>
@@ -891,7 +900,7 @@ export function InventoryTable({
                         <TableCell className="px-3 py-3">
                           <input
                             type="checkbox"
-                            aria-label={`Pilih kartu ${p.short_code}`}
+                            aria-label={`Pilih kartu ${cardLabel(p)}`}
                             checked={selected.has(p.id)}
                             onChange={() => toggleSelected(p.id)}
                             className="h-4 w-4 accent-[#0E7C86]"
@@ -903,7 +912,7 @@ export function InventoryTable({
                           className="font-semibold text-[#132320]"
                           style={MONO}
                         >
-                          {p.short_code}
+                          {cardLabel(p)}
                         </p>
                         <CardUrlLink
                           code={p.short_code}
@@ -986,7 +995,7 @@ export function InventoryTable({
               {showSelect && (
                 <input
                   type="checkbox"
-                  aria-label={`Pilih kartu ${p.short_code}`}
+                  aria-label={`Pilih kartu ${cardLabel(p)}`}
                   checked={selected.has(p.id)}
                   onChange={() => toggleSelected(p.id)}
                   className="mt-1 h-5 w-5 shrink-0 accent-[#0E7C86]"
@@ -997,7 +1006,7 @@ export function InventoryTable({
                   {p.business_name || "(Tanpa nama)"}
                 </p>
                 <p className="text-xs text-[#132320]/40" style={MONO}>
-                  {p.short_code}
+                  {cardLabel(p)}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1">
@@ -1096,6 +1105,7 @@ export function InventoryTable({
 
       <QrPrintDialog
         shortCode={printingCode}
+        label={printingLabel}
         open={!!printingCode}
         onOpenChange={(o) => !o && setPrintingCode(null)}
       />
@@ -1149,7 +1159,9 @@ export function InventoryTable({
       <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Data Toko — {editing?.short_code}</DialogTitle>
+            <DialogTitle>
+              Edit Data Toko — {editing ? cardLabel(editing) : ""}
+            </DialogTitle>
           </DialogHeader>
           {editing && (
             <OverrideForm product={editing} onSave={handleSaveOverride} />
