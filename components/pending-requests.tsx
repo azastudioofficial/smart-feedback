@@ -7,10 +7,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { approveActivation, rejectActivation } from "@/app/actions/activation";
 import { safeHttpUrl } from "@/lib/safe-url";
+import { formatCardNumber } from "@/lib/card-number";
 
 type PendingProduct = {
   id: string;
   short_code: string;
+  card_seq?: number | null;
   business_name: string | null;
   google_review_url: string | null;
   owner_whatsapp: string | null;
@@ -84,7 +86,7 @@ export function PendingRequests({
               <p className="font-semibold text-[#132320]">
                 {p.business_name || "(Tanpa nama)"}
                 <span className="ml-2 text-xs font-normal text-[#132320]/40" style={MONO}>
-                  {p.short_code}
+                  {formatCardNumber(p.card_seq) ?? p.short_code}
                 </span>
               </p>
               <p className="text-xs text-[#132320]/50">
