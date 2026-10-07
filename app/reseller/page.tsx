@@ -87,6 +87,7 @@ export default async function ResellerPage() {
       id: "kartu-saya",
       label: "Kartu Saya",
       icon: "cards",
+      wide: true,
       content: (
         <InventoryTable
           products={products.slice(0, 25)}
