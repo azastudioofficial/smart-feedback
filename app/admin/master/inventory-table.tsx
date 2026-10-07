@@ -73,6 +73,23 @@ type Product = {
 
 const MONO = { fontFamily: "var(--font-mono-ticket)" };
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
+
+// Filter status sebagai "chip" (dulu <select>) - semua pilihan kelihatan
+// sekaligus dan bisa diganti dengan satu klik.
+const STATUS_CHIPS: {
+  value: NonNullable<InventoryFilters["status"]>;
+  label: string;
+}[] = [
+  { value: "", label: "Semua" },
+  { value: "aktif", label: "Aktif" },
+  { value: "menunggu", label: "Menunggu" },
+  { value: "stok_siap", label: "Stok Siap" },
+  { value: "stok_aktif", label: "Stok Aktif" },
+  { value: "suspended", label: "Suspended" },
+];
+
+const TH =
+  "h-10 px-3 text-[11px] font-semibold uppercase tracking-wide text-[#132320]/50";
 const PAGE_SIZE = 25;
 
 
@@ -584,7 +601,7 @@ export function InventoryTable({
       <DropdownMenu>
         <DropdownMenuTrigger
           disabled={busyId === p.id}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#132320]/15 transition hover:bg-black/[0.04] disabled:opacity-50"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#132320]/15 transition hover:bg-black/[0.04] disabled:opacity-50 lg:h-10 lg:w-10"
         >
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
@@ -629,12 +646,21 @@ export function InventoryTable({
     );
   }
 
+  const rangeFrom = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const rangeTo = Math.min(currentPage * PAGE_SIZE, total);
+
   return (
-    <div className="rounded-2xl border border-black/[0.06] bg-white/70 shadow-sm backdrop-blur">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-        <h2 className="text-lg font-extrabold text-[#132320]" style={HEADING}>
-          Semua Kartu ({total})
-        </h2>
+    <div className="rounded-2xl border border-black/[0.06] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+      {/* ===== Header ===== */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-4 pt-5">
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-lg font-extrabold text-[#132320]" style={HEADING}>
+            Semua Kartu
+          </h2>
+          <span className="rounded-full bg-[#EEF1F1] px-2.5 py-0.5 text-xs font-semibold tabular-nums text-[#132320]/60">
+            {total}
+          </span>
+        </div>
         {allowPlanChange && (
           <Button
             variant="outline"
@@ -642,112 +668,104 @@ export function InventoryTable({
               setCodesMessage(null);
               setCodesOpen(true);
             }}
-            className="h-11 gap-2 border-[#132320]/15"
+            className="h-10 gap-2 border-[#132320]/15"
           >
             <Crown className="h-4 w-4" />
             Ubah Paket via Kode
           </Button>
         )}
-        {totalPages > 1 && (
-          <div className="flex items-center gap-2 text-sm text-[#132320]/60">
-            <button
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1 || loadingPage}
-              className="flex h-11 w-11 items-center justify-center rounded-md border border-black/[0.1] disabled:opacity-30"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span>
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= totalPages || loadingPage}
-              className="flex h-11 w-11 items-center justify-center rounded-md border border-black/[0.1] disabled:opacity-30"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* ===== Filter: cari / reseller / status ===== */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.06] px-5 py-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#132320]/35" />
-          <Input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Cari nama toko atau ID kartu..."
-            className="h-11 pl-9"
-          />
-        </div>
+      {/* ===== Filter: cari + reseller, lalu chip status ===== */}
+      <div className="space-y-3 border-t border-black/[0.06] px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#132320]/35" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Cari nama toko atau ID kartu..."
+              className="h-11 pl-9"
+            />
+          </div>
 
-        {showResellerColumn && (
-          <select
-            value={resellerFilter}
-            onChange={(e) => setResellerFilter(e.target.value)}
-            aria-label="Filter reseller"
-            className="h-11 min-w-[180px] rounded-md border border-black/[0.12] bg-white px-3 text-sm text-[#132320] focus:outline-none focus:ring-2 focus:ring-[#0E7C86]/40"
-          >
-            <option value="">Semua Reseller</option>
-            {resellerOptions.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <select
-          value={statusFilter}
-          onChange={(e) =>
-            setStatusFilter(e.target.value as InventoryFilters["status"])
-          }
-          aria-label="Filter status"
-          className="h-11 min-w-[170px] rounded-md border border-black/[0.12] bg-white px-3 text-sm text-[#132320] focus:outline-none focus:ring-2 focus:ring-[#0E7C86]/40"
-        >
-          <option value="">Semua Status</option>
-          <option value="aktif">Aktif</option>
-          <option value="stok_siap">Stok Siap</option>
-          <option value="stok_aktif">Stok Aktif</option>
-          <option value="menunggu">Menunggu Persetujuan</option>
-          <option value="suspended">Suspended</option>
-        </select>
-
-        {filtersActive && (
-          <Button
-            variant="ghost"
-            onClick={clearFilters}
-            className="h-11 gap-1 text-[#132320]/60"
-          >
-            <X className="h-4 w-4" />
-            Reset
-          </Button>
-        )}
-
-        {allowStockActivation &&
-          total > 0 &&
-          (statusFilter === "stok_siap" || statusFilter === "stok_aktif") && (
-            <Button
-              variant="outline"
-              disabled={bulkBusy}
-              onClick={() => handleStockByFilter(statusFilter === "stok_siap")}
-              className="h-11 gap-2 border-[#0E7C86]/40 text-[#0E7C86]"
+          {showResellerColumn && (
+            <select
+              value={resellerFilter}
+              onChange={(e) => setResellerFilter(e.target.value)}
+              aria-label="Filter reseller"
+              className="h-11 min-w-[180px] rounded-md border border-black/[0.12] bg-white px-3 text-sm text-[#132320] focus:outline-none focus:ring-2 focus:ring-[#0E7C86]/40"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              {bulkBusy
-                ? "Memproses..."
-                : statusFilter === "stok_siap"
-                  ? `Aktifkan stok semua (${total})`
-                  : `Batalkan stok aktif semua (${total})`}
-            </Button>
+              <option value="">Semua Reseller</option>
+              {resellerOptions.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
           )}
 
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              onClick={clearFilters}
+              className="h-11 gap-1 text-[#132320]/60"
+            >
+              <X className="h-4 w-4" />
+              Reset
+            </Button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Filter status"
+            className="flex max-w-full gap-1.5 overflow-x-auto pb-0.5"
+          >
+            {STATUS_CHIPS.map((c) => {
+              const on = (statusFilter ?? "") === c.value;
+              return (
+                <button
+                  key={c.value || "semua"}
+                  type="button"
+                  onClick={() => setStatusFilter(c.value)}
+                  aria-pressed={on}
+                  className={`h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-semibold transition ${
+                    on
+                      ? "border-[#132320] bg-[#132320] text-white"
+                      : "border-black/[0.1] bg-white text-[#132320]/65 hover:border-[#0E7C86]/40 hover:text-[#0E7C86]"
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {allowStockActivation &&
+            total > 0 &&
+            (statusFilter === "stok_siap" || statusFilter === "stok_aktif") && (
+              <Button
+                variant="outline"
+                disabled={bulkBusy}
+                onClick={() => handleStockByFilter(statusFilter === "stok_siap")}
+                className="h-9 gap-2 border-[#0E7C86]/40 text-[#0E7C86] sm:ml-auto"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {bulkBusy
+                  ? "Memproses..."
+                  : statusFilter === "stok_siap"
+                    ? `Aktifkan stok semua (${total})`
+                    : `Batalkan stok aktif semua (${total})`}
+              </Button>
+            )}
+        </div>
+
         {filtersActive && (
-          <span className="w-full text-sm text-[#132320]/55">
+          <p className="text-[13px] text-[#132320]/55">
             Menampilkan {total} kartu yang cocok dengan filter.
-          </span>
+          </p>
         )}
       </div>
 
@@ -807,106 +825,154 @@ export function InventoryTable({
         </div>
       )}
 
-      {/* ===== Tampilan TABEL - lg ke atas (tablet landscape & desktop).
-          7-8 kolom sekaligus itu nyaman di layar lebar, tapi kepaksa
-          scroll ke samping kalau dipaksa muat di HP - makanya di layar
-          sempit diganti tampilan kartu di bawah, bukan tabel yang sama
-          dipersempit. ===== */}
-      <div className="hidden overflow-x-auto lg:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {showSelect && (
-                <TableHead className="w-10">
-                  <input
-                    type="checkbox"
-                    aria-label="Pilih semua kartu di halaman ini"
-                    checked={allOnPageSelected}
-                    onChange={toggleSelectAllOnPage}
-                    className="h-4 w-4 accent-[#0E7C86]"
-                  />
-                </TableHead>
-              )}
-              <TableHead>ID Kartu</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Paket</TableHead>
-              <TableHead>Nama Toko</TableHead>
-              {showResellerColumn && <TableHead>Reseller</TableHead>}
-              <TableHead>Link Review</TableHead>
-              <TableHead>Scan</TableHead>
-              <TableHead>Scan Terakhir</TableHead>
-              <TableHead>URL Kartu</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((p) => (
-              <TableRow key={p.id}>
-                {showSelect && (
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      aria-label={`Pilih kartu ${p.short_code}`}
-                      checked={selected.has(p.id)}
-                      onChange={() => toggleSelected(p.id)}
-                      className="h-4 w-4 accent-[#0E7C86]"
-                    />
-                  </TableCell>
-                )}
-                <TableCell className="font-semibold" style={MONO}>
-                  {p.short_code}
-                </TableCell>
-                <TableCell>
-                  <StatusBadge p={p} />
-                </TableCell>
-                <TableCell>
-                  <PlanBadge p={p} />
-                </TableCell>
-                <TableCell>{p.business_name || "-"}</TableCell>
-                {showResellerColumn && (
-                  <TableCell className="text-xs text-[#132320]/60">
-                    {p.reseller_name || "-"}
-                  </TableCell>
-                )}
-                <TableCell>
-                  {safeHttpUrl(p.google_review_url) ? (
-                    <a
-                      href={safeHttpUrl(p.google_review_url) as string}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#0E7C86] underline underline-offset-2"
-                    >
-                      Buka Link
-                    </a>
-                  ) : (
-                    <span className="text-[#132320]/40">-</span>
+      {items.length === 0 ? (
+        <div className="border-t border-black/[0.06] px-5 py-14 text-center">
+          <p className="text-sm font-semibold text-[#132320]">
+            Tidak ada kartu yang cocok
+          </p>
+          <p className="mt-1 text-[13px] text-[#132320]/50">
+            {filtersActive
+              ? "Coba ubah kata kunci atau filternya."
+              : "Belum ada kartu. Buat stok QR lebih dulu."}
+          </p>
+          {filtersActive && (
+            <Button
+              variant="outline"
+              onClick={clearFilters}
+              className="mt-4 h-10"
+            >
+              Reset filter
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div
+          className={`border-t border-black/[0.06] transition-opacity ${
+            loadingPage ? "opacity-60" : ""
+          }`}
+        >
+          {/* ===== Tampilan TABEL - lg ke atas. Kolom dirapatkan jadi 5
+              (Kartu, Toko, Status, Scan, Aksi): ID + link kartu jadi satu,
+              reseller & link review ikut di bawah nama toko, paket ikut
+              di kolom status, scan terakhir ikut di bawah jumlah scan.
+              Di layar sempit dipakai tampilan kartu di bawah. ===== */}
+          <div className="hidden lg:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#F6F8F7]/80 hover:bg-[#F6F8F7]/80">
+                  {showSelect && (
+                    <TableHead className="w-10 px-3">
+                      <input
+                        type="checkbox"
+                        aria-label="Pilih semua kartu di halaman ini"
+                        checked={allOnPageSelected}
+                        onChange={toggleSelectAllOnPage}
+                        className="h-4 w-4 accent-[#0E7C86]"
+                      />
+                    </TableHead>
                   )}
-                </TableCell>
-                <TableCell style={MONO}>{scanCounts[p.id] ?? 0}</TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <LastScan iso={p.last_scanned_at} />
-                </TableCell>
-                <TableCell className="max-w-[180px] truncate text-xs">
-                  <CardUrlLink code={p.short_code} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      disabled={busyId === p.id}
-                      onClick={() => handlePrintQr(p)}
-                      className="h-11 border-[#132320]/15"
-                    >
-                      Cetak QR
-                    </Button>
-                    {renderRowMenu(p)}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+                  <TableHead className={TH}>Kartu</TableHead>
+                  <TableHead className={TH}>Toko</TableHead>
+                  <TableHead className={TH}>Status</TableHead>
+                  <TableHead className={TH}>Scan</TableHead>
+                  <TableHead className={`${TH} text-right`}>Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((p) => {
+                  const reviewHref = safeHttpUrl(p.google_review_url);
+                  const hasMeta =
+                    (showResellerColumn && !!p.reseller_name) || !!reviewHref;
+                  return (
+                    <TableRow key={p.id}>
+                      {showSelect && (
+                        <TableCell className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Pilih kartu ${p.short_code}`}
+                            checked={selected.has(p.id)}
+                            onChange={() => toggleSelected(p.id)}
+                            className="h-4 w-4 accent-[#0E7C86]"
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className="px-3 py-3">
+                        <p
+                          className="font-semibold text-[#132320]"
+                          style={MONO}
+                        >
+                          {p.short_code}
+                        </p>
+                        <CardUrlLink
+                          code={p.short_code}
+                          className="mt-0.5 text-[11px]"
+                        />
+                      </TableCell>
+                      <TableCell className="px-3 py-3">
+                        <p
+                          className={`font-medium ${
+                            p.business_name
+                              ? "text-[#132320]"
+                              : "text-[#132320]/35"
+                          }`}
+                        >
+                          {p.business_name || "Belum diisi"}
+                        </p>
+                        {hasMeta && (
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-[#132320]/50">
+                            {showResellerColumn && p.reseller_name && (
+                              <span>{p.reseller_name}</span>
+                            )}
+                            {reviewHref && (
+                              <a
+                                href={reviewHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[#0E7C86] hover:underline"
+                              >
+                                Link review
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                              </a>
+                            )}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-3 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge p={p} />
+                          <PlanBadge p={p} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap px-3 py-3">
+                        <p
+                          className="font-semibold tabular-nums text-[#132320]"
+                          style={MONO}
+                        >
+                          {scanCounts[p.id] ?? 0}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#132320]/50">
+                          <LastScan iso={p.last_scanned_at} compact />
+                        </p>
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            disabled={busyId === p.id}
+                            onClick={() => handlePrintQr(p)}
+                            className="h-10 border-[#132320]/15"
+                          >
+                            Cetak QR
+                          </Button>
+                          {renderRowMenu(p)}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
       {/* ===== Tampilan KARTU - di bawah lg (HP & tablet portrait).
           Field yang ditampilkan sengaja dipilih yang paling penting
@@ -983,6 +1049,44 @@ export function InventoryTable({
           </div>
         ))}
       </div>
+        </div>
+      )}
+
+      {/* ===== Footer: rentang data + halaman ===== */}
+      {total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-black/[0.06] px-5 py-3 text-[13px] text-[#132320]/55">
+          <span>
+            Menampilkan{" "}
+            <strong className="font-semibold text-[#132320]">
+              {rangeFrom}&ndash;{rangeTo}
+            </strong>{" "}
+            dari {total} kartu
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage <= 1 || loadingPage}
+                aria-label="Halaman sebelumnya"
+                className="flex h-10 w-10 items-center justify-center rounded-md border border-black/[0.1] bg-white transition hover:bg-black/[0.03] disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="min-w-[56px] text-center tabular-nums">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage >= totalPages || loadingPage}
+                aria-label="Halaman berikutnya"
+                className="flex h-10 w-10 items-center justify-center rounded-md border border-black/[0.1] bg-white transition hover:bg-black/[0.03] disabled:opacity-30"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <QrPrintDialog
         shortCode={printingCode}
