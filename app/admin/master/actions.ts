@@ -30,6 +30,7 @@ type InventoryItem = {
   is_active: boolean;
   is_suspended: boolean;
   pending_review: boolean;
+  stock_activated: boolean;
   plan: Plan;
   reseller_name: string | null;
   created_at: string;
@@ -52,7 +53,7 @@ export type InventoryFilters = {
   // data (bukan filter SQL) karena "status" kartu itu turunan dari 3
   // kolom boolean sekaligus (is_suspended, pending_review, is_active),
   // bukan 1 kolom tunggal.
-  status?: "aktif" | "stok_siap" | "menunggu" | "suspended" | "";
+  status?: "aktif" | "stok_siap" | "stok_aktif" | "menunggu" | "suspended" | "";
 };
 
 export async function getInventoryPage(
@@ -74,7 +75,7 @@ export async function getInventoryPage(
   let query = supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, plan, created_at, last_scanned_at, resellers(name)",
+      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, stock_activated, plan, created_at, last_scanned_at, resellers(name)",
       { count: "exact" }
     );
 
@@ -101,10 +102,20 @@ export async function getInventoryPage(
         .eq("is_active", true);
       break;
     case "stok_siap":
+      // Kartu kosong yang BELUM diberi tanda stok aktif.
       query = query
         .eq("is_suspended", false)
         .eq("pending_review", false)
-        .eq("is_active", false);
+        .eq("is_active", false)
+        .eq("stock_activated", false);
+      break;
+    case "stok_aktif":
+      // Kartu kosong yang sudah "stok aktif" (aktivasi tanpa persetujuan).
+      query = query
+        .eq("is_suspended", false)
+        .eq("pending_review", false)
+        .eq("is_active", false)
+        .eq("stock_activated", true);
       break;
   }
 
@@ -315,6 +326,142 @@ export async function setPlanByCodes(
   if (!result.success) return { success: false, error: result.error };
 
   return { success: true, updated: result.updated, notFound };
+}
+
+/**
+ * "Aktifkan stok": tandai kartu KOSONG sebagai stok aktif, sehingga
+ * pembeli yang mengaktivasinya langsung aktif tanpa permohonan/persetujuan
+ * (lihat activateProduct di app/activate/[id]/actions.ts). Kartu yang
+ * tidak ditandai tetap lewat alur permohonan seperti biasa.
+ *
+ * Admin & reseller boleh. Pakai client yang IKUT SESI LOGIN, jadi RLS
+ * membatasi reseller ke kartunya sendiri. Aktifkan hanya berlaku untuk
+ * kartu kosong (belum aktif, tidak menunggu persetujuan, tidak
+ * ditangguhkan); membatalkan berlaku untuk kartu yang sedang bertanda.
+ */
+export async function setStockActivation(
+  productIds: string[],
+  activate: boolean
+): Promise<{ success: boolean; updated?: number; skipped?: number; error?: string }> {
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const ids = Array.from(new Set(productIds)).filter(Boolean);
+  if (ids.length === 0) {
+    return { success: false, error: "Belum ada kartu yang dipilih." };
+  }
+  if (ids.length > 200) {
+    return { success: false, error: "Maksimal 200 kartu sekali proses." };
+  }
+
+  const supabase = await createServerSupabase();
+
+  let query = supabase
+    .from("products")
+    .update({ stock_activated: activate })
+    .in("id", ids);
+  query = activate
+    ? query
+        .eq("is_active", false)
+        .eq("pending_review", false)
+        .eq("is_suspended", false)
+    : query.eq("stock_activated", true);
+
+  const { data, error } = await query.select("id");
+
+  if (error) {
+    console.error("Gagal ubah stok aktif:", error.message);
+    return { success: false, error: "Gagal mengubah status stok." };
+  }
+
+  const updatedIds = (data ?? []).map((r) => r.id as string);
+  if (updatedIds.length > 0) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    // Catatan audit - best-effort, tidak menggagalkan aksi utama.
+    await supabase.from("admin_actions").insert(
+      updatedIds.map((id) => ({
+        actor_id: user?.id,
+        product_id: id,
+        action: activate ? "stock_activate" : "stock_deactivate",
+        detail: null,
+      }))
+    );
+  }
+
+  revalidatePath("/admin/master");
+  revalidatePath("/reseller");
+  return {
+    success: true,
+    updated: updatedIds.length,
+    skipped: ids.length - updatedIds.length,
+  };
+}
+
+/**
+ * Sama seperti setStockActivation, tapi untuk SEMUA kartu yang cocok
+ * dengan filter (cari / reseller) - berguna saat stok ratusan kartu dan
+ * tidak praktis dicentang per halaman. Aktifkan memproses kartu kosong
+ * yang belum bertanda; membatalkan memproses kartu yang sedang bertanda.
+ */
+export async function setStockActivationByFilter(
+  filters: { search?: string; resellerId?: string },
+  activate: boolean
+): Promise<{ success: boolean; updated?: number; error?: string }> {
+  const guard = await requireRole(["super_admin", "reseller"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const supabase = await createServerSupabase();
+
+  let query = supabase
+    .from("products")
+    .update({ stock_activated: activate }, { count: "exact" });
+
+  if (filters.search?.trim()) {
+    // Pembersihan yang sama dengan getInventoryPage (koma/kurung punya
+    // arti khusus di sintaks .or() milik PostgREST).
+    const term = filters.search.trim().replace(/[,()%]/g, " ").slice(0, 100);
+    query = query.or(`business_name.ilike.%${term}%,short_code.ilike.%${term}%`);
+  }
+  if (filters.resellerId) {
+    query = query.eq("reseller_id", filters.resellerId);
+  }
+  query = activate
+    ? query
+        .eq("is_active", false)
+        .eq("pending_review", false)
+        .eq("is_suspended", false)
+        .eq("stock_activated", false)
+    : query.eq("stock_activated", true);
+
+  const { count, error } = await query;
+
+  if (error) {
+    console.error("Gagal ubah stok aktif (massal):", error.message);
+    return { success: false, error: "Gagal mengubah status stok." };
+  }
+
+  const updated = count ?? 0;
+  if (updated > 0) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    await supabase.from("admin_actions").insert({
+      actor_id: user?.id,
+      product_id: null,
+      action: activate ? "stock_activate_bulk" : "stock_deactivate_bulk",
+      detail: {
+        count: updated,
+        search: filters.search?.trim() || null,
+        reseller_id: filters.resellerId || null,
+      },
+    });
+  }
+
+  revalidatePath("/admin/master");
+  revalidatePath("/reseller");
+  return { success: true, updated };
 }
 
 export async function toggleSuspend(
