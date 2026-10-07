@@ -33,14 +33,14 @@ export default async function ResellerPage() {
   const { data: myProducts } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, stock_activated, plan, created_at, last_scanned_at"
+      "id, short_code, card_seq, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, stock_activated, plan, created_at, last_scanned_at"
     )
-    .order("created_at", { ascending: false });
+    .order("card_seq", { ascending: true });
 
   const { data: pendingRaw } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, created_at"
+      "id, short_code, card_seq, business_name, google_review_url, owner_whatsapp, created_at"
     )
     .eq("pending_review", true)
     .order("created_at", { ascending: true });
