@@ -158,6 +158,8 @@ export function ActivateForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  // true = kartu "stok aktif": langsung aktif, tanpa menunggu persetujuan.
+  const [autoApproved, setAutoApproved] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [values, setValues] = useState({
@@ -181,6 +183,17 @@ export function ActivateForm({
   useEffect(() => {
     if (!submitted) return;
 
+    // Kartu stok aktif sudah aktif sejak submit - tidak perlu polling,
+    // cukup beri jeda singkat supaya pesan sukses sempat terbaca.
+    if (autoApproved) {
+      const t = setTimeout(() => {
+        if (redirectingRef.current) return;
+        redirectingRef.current = true;
+        router.replace(`/feedback/${productId}`);
+      }, 1800);
+      return () => clearTimeout(t);
+    }
+
     const interval = setInterval(async () => {
       if (redirectingRef.current) return;
 
@@ -193,7 +206,7 @@ export function ActivateForm({
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [submitted, productId, router]);
+  }, [submitted, autoApproved, productId, router]);
 
   function validateStep(target: number): boolean {
     const errs: FieldErrors = {};
@@ -284,7 +297,39 @@ export function ActivateForm({
       return;
     }
 
+    setAutoApproved(result.autoApproved === true);
     setSubmitted(true);
+  }
+
+  if (submitted && autoApproved) {
+    return (
+      <div
+        className="w-full max-w-md animate-in fade-in slide-in-from-bottom-3 duration-500"
+        style={BODY}
+      >
+        <Card className="shadow-[0_25px_60px_-20px_rgba(19,35,32,0.28)]">
+          <CardContent className="flex flex-col items-center px-7 py-10 text-center sm:px-8">
+            <CheckCircle2 className="h-12 w-12 text-[var(--brand)]" />
+            <h1 className="mt-4 text-xl font-bold text-[#132320]">
+              Aktivasi Berhasil
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-[#132320]/55">
+              QR/NFC ini sudah{" "}
+              <strong className="text-[#132320]">aktif</strong> dan langsung
+              bisa dipakai pelanggan. Anda bisa login ke dashboard memakai
+              email &amp; password yang baru saja didaftarkan.
+            </p>
+            <div className="mt-4">
+              <CardIdBadge code={shortCode} />
+            </div>
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-[#132320]/40">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Membuka halaman toko Anda...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (submitted) {
