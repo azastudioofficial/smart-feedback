@@ -7,6 +7,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { darkenHex, lightenHex } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { ActivateForm } from "./activate-form";
+import { formatCardNumber } from "@/lib/card-number";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -30,7 +31,7 @@ function StatusScreen({
   tone: "rose" | "brand" | "amber";
   title: string;
   message: string;
-  /** ID Kartu (short_code) - ditampilkan supaya gampang disebutkan ke admin. */
+  /** Nomor kartu internal (AZA20001) - ditampilkan supaya gampang disebutkan ke admin. */
   cardId?: string;
 }) {
   const toneClasses = {
@@ -105,6 +106,19 @@ export default async function ActivatePage({ params }: Props) {
     redirect(`/r/${product.id}`);
   }
 
+  // Label yang ditampilkan ke pembeli = nomor kartu internal (AZA20001),
+  // BUKAN kode acak di QR. Dibaca terpisah & gagal-aman: kalau kolomnya belum
+  // ada / query gagal, pakai short_code seperti sebelumnya.
+  let cardLabel: string = product.short_code;
+  const { data: seqRow, error: seqError } = await supabase
+    .from("products")
+    .select("card_seq")
+    .eq("id", id)
+    .maybeSingle();
+  if (!seqError) {
+    cardLabel = formatCardNumber(seqRow?.card_seq) ?? cardLabel;
+  }
+
   if (product.pending_review) {
     return (
       <StatusScreen
@@ -112,7 +126,7 @@ export default async function ActivatePage({ params }: Props) {
         tone="amber"
         title="Menunggu Persetujuan"
         message="Permohonan aktivasi untuk QR/NFC ini sudah terkirim dan sedang ditinjau. Silakan cek kembali beberapa saat lagi."
-        cardId={product.short_code}
+        cardId={cardLabel}
       />
     );
   }
@@ -133,7 +147,7 @@ export default async function ActivatePage({ params }: Props) {
     >
       <ActivateForm
         productId={product.id}
-        shortCode={product.short_code}
+        shortCode={cardLabel}
         isPro={product.plan === "pro"}
       />
     </main>
