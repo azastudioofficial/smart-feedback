@@ -135,7 +135,22 @@ export async function updateSettings(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
-  // Validasi di server - form di browser bisa dilewati.
+  // Ambil plan lewat client sesi login. RLS memastikan owner hanya bisa
+  // membaca produknya sendiri. Entitlement Basic/Pro diputuskan ulang
+  // di SERVER supaya tidak bergantung pada field yang disembunyikan UI.
+  const { data: product, error: productError } = await supabase
+    .from("products")
+    .select("plan")
+    .eq("id", productId)
+    .maybeSingle();
+
+  if (productError || !product) {
+    return { success: false, error: "Toko tidak ditemukan atau akses ditolak." };
+  }
+
+  const isPro = product.plan === "pro";
+
+  // Validasi field yang memang tersedia untuk SEMUA paket.
   const businessName = (data.businessName ?? "").trim();
   if (!businessName || businessName.length > 120) {
     return { success: false, error: "Nama toko wajib diisi (maksimal 120 karakter)." };
@@ -147,71 +162,64 @@ export async function updateSettings(
       error: "Link Google Review tidak valid (harus diawali http:// atau https://).",
     };
   }
-  const ownerWhatsapp = (data.ownerWhatsapp ?? "").trim();
-  if (ownerWhatsapp && !/^[0-9+\-\s()]{6,30}$/.test(ownerWhatsapp)) {
-    return { success: false, error: "Nomor WhatsApp tidak valid." };
-  }
-  if (data.logoUrl && !isAllowedCloudinaryUrl(data.logoUrl)) {
-    return { success: false, error: "URL logo tidak valid. Upload ulang logonya." };
-  }
-  if (data.coverImageUrl && !isAllowedCloudinaryUrl(data.coverImageUrl)) {
-    return { success: false, error: "URL foto sampul tidak valid. Upload ulang fotonya." };
-  }
-  if (data.brandColor && !/^#[0-9a-fA-F]{6}$/.test(data.brandColor)) {
-    return { success: false, error: "Warna brand tidak valid." };
-  }
 
+  // Basic hanya boleh mengubah Nama Toko + Google Review. Field Pro lama
+  // sengaja TIDAK di-null-kan agar saat upgrade lagi seluruh konfigurasi
+  // sebelumnya tetap tersedia.
   const updatePayload: Record<string, unknown> = {
     business_name: businessName,
     google_review_url: reviewUrl,
-    owner_whatsapp: ownerWhatsapp,
   };
-  if (data.logoUrl) {
-    updatePayload.logo_url = data.logoUrl;
-  }
-  if (data.coverImageUrl) {
-    updatePayload.cover_image_url = data.coverImageUrl;
-  }
-  if (data.coverPosition) {
-    // Dikirim tiap kali ada foto sampul aktif - termasuk waktu owner
-    // CUMA geser posisi tanpa ganti fotonya sama sekali.
-    updatePayload.cover_position = data.coverPosition;
-  }
-  if (data.brandColor) {
-    updatePayload.brand_color = data.brandColor;
-  }
-  if (data.socialLinks) {
-    // Selalu dikirim (bahkan array kosong) - supaya owner yang
-    // menghapus SEMUA tautan lama tetap kesimpen kosong, bukan malah
-    // dianggap "tidak berubah" dan tetap pakai data lama.
-    // Maks 20 tautan; ikon custom hanya boleh URL Cloudinary milik kita.
-    updatePayload.social_links = sanitizeSocialLinks(data.socialLinks)
-      .slice(0, 20)
-      .map((link) => ({
-        ...link,
-        label: link.label ? String(link.label).slice(0, 60) : link.label,
-        icon_url: isAllowedCloudinaryUrl(link.icon_url) ? link.icon_url : null,
-      }));
+
+  if (isPro) {
+    const ownerWhatsapp = (data.ownerWhatsapp ?? "").trim();
+    if (ownerWhatsapp && !/^[0-9+\-\s()]{6,30}$/.test(ownerWhatsapp)) {
+      return { success: false, error: "Nomor WhatsApp tidak valid." };
+    }
+    if (data.logoUrl && !isAllowedCloudinaryUrl(data.logoUrl)) {
+      return { success: false, error: "URL logo tidak valid. Upload ulang logonya." };
+    }
+    if (data.coverImageUrl && !isAllowedCloudinaryUrl(data.coverImageUrl)) {
+      return { success: false, error: "URL foto sampul tidak valid. Upload ulang fotonya." };
+    }
+    if (data.brandColor && !/^#[0-9a-fA-F]{6}$/.test(data.brandColor)) {
+      return { success: false, error: "Warna brand tidak valid." };
+    }
+
+    updatePayload.owner_whatsapp = ownerWhatsapp;
+    if (data.logoUrl) updatePayload.logo_url = data.logoUrl;
+    if (data.coverImageUrl) updatePayload.cover_image_url = data.coverImageUrl;
+    if (data.coverPosition) updatePayload.cover_position = data.coverPosition;
+    if (data.brandColor) updatePayload.brand_color = data.brandColor;
+
+    if (data.socialLinks) {
+      // Selalu dikirim (termasuk array kosong) agar owner Pro dapat
+      // menghapus seluruh tautan lama.
+      updatePayload.social_links = sanitizeSocialLinks(data.socialLinks)
+        .slice(0, 20)
+        .map((link) => ({
+          ...link,
+          label: link.label ? String(link.label).slice(0, 60) : link.label,
+          icon_url: isAllowedCloudinaryUrl(link.icon_url) ? link.icon_url : null,
+        }));
+    }
+
+    const cleanText = (v: string, max: number): string | null => {
+      const t = v.replace(/\s+/g, " ").trim().slice(0, max);
+      return t || null;
+    };
+    if (typeof data.connectTitle === "string") {
+      updatePayload.connect_title = cleanText(data.connectTitle, 60);
+    }
+    if (typeof data.connectDescription === "string") {
+      updatePayload.connect_description = cleanText(data.connectDescription, 140);
+    }
   }
 
-  // Judul & keterangan tombol "Terhubung dengan Kami". undefined = tidak
-  // diubah; string kosong = dihapus (kembali ke teks bawaan). Dibatasi
-  // panjangnya di server, dan spasi/baris baru dirapikan jadi 1 spasi.
-  const cleanText = (v: string, max: number): string | null => {
-    const t = v.replace(/\s+/g, " ").trim().slice(0, max);
-    return t || null;
-  };
-  if (typeof data.connectTitle === "string") {
-    updatePayload.connect_title = cleanText(data.connectTitle, 60);
-  }
-  if (typeof data.connectDescription === "string") {
-    updatePayload.connect_description = cleanText(data.connectDescription, 140);
-  }
-
-  // Ikon custom yang tersimpan SEKARANG - dibaca sebelum update, supaya
-  // setelah berhasil tersimpan kita tahu ikon mana yang sudah tidak dipakai.
+  // Ikon custom lama hanya relevan untuk Pro. Basic tidak menyentuh
+  // social_links sama sekali sehingga asset Pro lama tetap aman.
   let oldIconUrls: string[] = [];
-  if (data.socialLinks) {
+  if (isPro && data.socialLinks) {
     const { data: current } = await supabase
       .from("products")
       .select("social_links")
@@ -230,11 +238,7 @@ export async function updateSettings(
     return { success: false, error: "Gagal menyimpan pengaturan." };
   }
 
-  // Pengaturan SUDAH tersimpan -> baru bersihkan file ikon lama yang diganti
-  // atau dihapus (best-effort). Sebelumnya file dihapus langsung saat owner
-  // menekan tombol ganti/hapus, sebelum Simpan - kalau halaman ditutup tanpa
-  // menyimpan, database masih menunjuk ke file yang sudah hilang.
-  if (data.socialLinks) {
+  if (isPro && data.socialLinks) {
     const kept = new Set(iconUrlsOf(updatePayload.social_links));
     for (const url of oldIconUrls) {
       if (kept.has(url) || !isAllowedCloudinaryUrl(url)) continue;
@@ -245,7 +249,6 @@ export async function updateSettings(
         await deleteCloudinaryImage(publicId);
       } catch (err) {
         console.error("Gagal hapus ikon lama dari Cloudinary:", err);
-        // Tidak fatal - pengaturan sudah tersimpan.
       }
     }
   }
@@ -372,6 +375,29 @@ export async function updateFeedbackStatus(
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
 
+  // RLS memastikan feedback yang terbaca adalah milik owner ini.
+  // Setelah itu cek entitlement: paket Basic boleh menyimpan histori
+  // feedback lama, tetapi pengelolaannya dibekukan sampai upgrade Pro.
+  const { data: feedback } = await supabase
+    .from("feedbacks")
+    .select("product_id")
+    .eq("id", feedbackId)
+    .maybeSingle();
+
+  if (!feedback) {
+    return { success: false, error: "Keluhan tidak ditemukan atau akses ditolak." };
+  }
+
+  const { data: product } = await supabase
+    .from("products")
+    .select("plan")
+    .eq("id", feedback.product_id)
+    .maybeSingle();
+
+  if (!product || product.plan !== "pro") {
+    return { success: false, error: "Fitur keluhan hanya tersedia pada paket Pro." };
+  }
+
   const { error } = await supabase
     .from("feedbacks")
     .update({ status })
@@ -434,12 +460,25 @@ export async function deleteFeedback(feedbackId: string): Promise<ActionResult> 
 
   const { data: feedback, error: findError } = await supabase
     .from("feedbacks")
-    .select("id, photo_url, photo_path")
+    .select("id, product_id, photo_url, photo_path")
     .eq("id", feedbackId)
     .maybeSingle();
 
   if (findError || !feedback) {
     return { success: false, error: "Keluhan tidak ditemukan atau sudah dihapus." };
+  }
+
+  // Feedback yang masih terlihat lewat RLS memang milik owner ini, tetapi
+  // DELETE adalah fitur Pro. Cek plan sebelum menyentuh file Cloudinary
+  // maupun memakai service role untuk menghapus row database.
+  const { data: product } = await supabase
+    .from("products")
+    .select("plan")
+    .eq("id", feedback.product_id)
+    .maybeSingle();
+
+  if (!product || product.plan !== "pro") {
+    return { success: false, error: "Fitur keluhan hanya tersedia pada paket Pro." };
   }
 
   const service = createServiceClient();
