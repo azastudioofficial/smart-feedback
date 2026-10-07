@@ -7,6 +7,7 @@ import {
   createServiceClient,
 } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth-guards";
+import { formatCardNumber, parseCardNumber } from "@/lib/card-number";
 import { safeHttpUrl } from "@/lib/safe-url";
 import {
   collectProductAssets,
@@ -17,13 +18,19 @@ import {
 
 type ActionResult = { success: boolean; error?: string };
 
-type GeneratedItem = { id: string; short_code: string };
+type GeneratedItem = {
+  id: string;
+  short_code: string;
+  /** Nomor kartu internal (AZA20001) - diisi setelah kartu dibuat. */
+  card_number?: string | null;
+};
 
 export type Plan = "basic" | "pro";
 
 type InventoryItem = {
   id: string;
   short_code: string;
+  card_seq: number | null;
   business_name: string | null;
   google_review_url: string | null;
   owner_whatsapp: string | null;
@@ -75,7 +82,7 @@ export async function getInventoryPage(
   let query = supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, stock_activated, plan, created_at, last_scanned_at, resellers(name)",
+      "id, short_code, card_seq, business_name, google_review_url, owner_whatsapp, is_active, is_suspended, pending_review, stock_activated, plan, created_at, last_scanned_at, resellers(name)",
       { count: "exact" }
     );
 
@@ -83,7 +90,13 @@ export async function getInventoryPage(
     // escape koma & spasi ganda - karakter itu berarti khusus di
     // sintaks .or() milik PostgREST kalau tidak dibersihkan dulu.
     const term = filters.search.trim().replace(/[,()%]/g, " ").slice(0, 100);
-    query = query.or(`business_name.ilike.%${term}%,short_code.ilike.%${term}%`);
+    // Nomor kartu internal (AZA20001 / 20001) dicari lewat kolom card_seq.
+    const cardSeq = parseCardNumber(term);
+    query = query.or(
+      `business_name.ilike.%${term}%,short_code.ilike.%${term}%${
+        cardSeq ? `,card_seq.eq.${cardSeq}` : ""
+      }`
+    );
   }
   if (filters.resellerId) {
     query = query.eq("reseller_id", filters.resellerId);
@@ -119,8 +132,9 @@ export async function getInventoryPage(
       break;
   }
 
+  // Urut menurut nomor kartu internal (AZA20001, AZA20002, ...).
   const { data, error, count } = await query
-    .order("created_at", { ascending: false })
+    .order("card_seq", { ascending: true })
     .range(from, to);
 
   if (error) {
@@ -204,6 +218,29 @@ export async function generateProducts(
         success: false,
         error: "Kartu berhasil dibuat tapi gagal diset ke Pro. Ubah manual lewat menu Semua Kartu.",
       };
+    }
+  }
+
+  // Lengkapi dengan nomor kartu internal (AZA20001, ...). Best-effort: kalau
+  // kolomnya belum ada / query gagal, hasil tetap dikirim tanpa nomor dan
+  // tampilan memakai short_code seperti sebelumnya.
+  if (generated.length > 0) {
+    try {
+      const { data: seqRows } = await createServiceClient()
+        .from("products")
+        .select("id, card_seq")
+        .in("id", generated.map((g) => g.id));
+      const seqById = new Map<string, unknown>(
+        (seqRows ?? []).map((r: { id: string; card_seq: unknown }) => [
+          r.id,
+          r.card_seq,
+        ])
+      );
+      for (const g of generated) {
+        g.card_number = formatCardNumber(seqById.get(g.id) as number | null);
+      }
+    } catch (err) {
+      console.error("Gagal ambil nomor kartu:", err);
     }
   }
 
@@ -422,7 +459,13 @@ export async function setStockActivationByFilter(
     // Pembersihan yang sama dengan getInventoryPage (koma/kurung punya
     // arti khusus di sintaks .or() milik PostgREST).
     const term = filters.search.trim().replace(/[,()%]/g, " ").slice(0, 100);
-    query = query.or(`business_name.ilike.%${term}%,short_code.ilike.%${term}%`);
+    // Nomor kartu internal (AZA20001 / 20001) dicari lewat kolom card_seq.
+    const cardSeq = parseCardNumber(term);
+    query = query.or(
+      `business_name.ilike.%${term}%,short_code.ilike.%${term}%${
+        cardSeq ? `,card_seq.eq.${cardSeq}` : ""
+      }`
+    );
   }
   if (filters.resellerId) {
     query = query.eq("reseller_id", filters.resellerId);
