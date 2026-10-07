@@ -22,7 +22,14 @@ import {
 } from "@/lib/qr-design";
 import { generateProducts, listResellers, type Plan } from "./actions";
 
-type GeneratedItem = { id: string; short_code: string };
+type GeneratedItem = {
+  id: string;
+  short_code: string;
+  card_number?: string | null;
+};
+
+// Nama berkas / label: nomor kartu internal kalau ada, kalau tidak short_code.
+const labelOf = (i: GeneratedItem) => i.card_number ?? i.short_code;
 type Reseller = { id: string; name: string; card_count: number };
 
 const MONO = { fontFamily: "var(--font-mono-ticket)" };
@@ -59,7 +66,7 @@ export function BatchGenerator() {
         buildQrStylingOptions(design, `${baseUrl}/r/${items[0].short_code}`, 1000)
       );
       const blob = await qr.getRawData(format);
-      if (blob) triggerBlobDownload(blob as Blob, `${items[0].short_code}.${format}`);
+      if (blob) triggerBlobDownload(blob as Blob, `${labelOf(items[0])}.${format}`);
       return;
     }
 
@@ -72,7 +79,7 @@ export function BatchGenerator() {
           buildQrStylingOptions(design, `${baseUrl}/r/${item.short_code}`, 1000)
         );
         const blob = await qr.getRawData(format);
-        if (blob) zip.file(`${item.short_code}.${format}`, blob as Blob);
+        if (blob) zip.file(`${labelOf(item)}.${format}`, blob as Blob);
       })
     );
 
@@ -82,9 +89,12 @@ export function BatchGenerator() {
 
   function downloadCsv() {
     const baseUrl = window.location.origin;
-    const header = "short_code,url,id\n";
+    const header = "card_number,short_code,url,id\n";
     const rows = results
-      .map((r) => `${r.short_code},${baseUrl}/r/${r.short_code},${r.id}`)
+      .map(
+        (r) =>
+          `${r.card_number ?? ""},${r.short_code},${baseUrl}/r/${r.short_code},${r.id}`
+      )
       .join("\n");
     const blob = new Blob([header + rows], {
       type: "text/csv;charset=utf-8;",
@@ -220,12 +230,14 @@ export function BatchGenerator() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Short Code</TableHead>
+                  <TableHead>No. Kartu</TableHead>
+                  <TableHead>Kode QR</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {results.map((r) => (
                   <TableRow key={r.id}>
+                    <TableCell style={MONO}>{r.card_number ?? "-"}</TableCell>
                     <TableCell style={MONO}>{r.short_code}</TableCell>
                   </TableRow>
                 ))}
