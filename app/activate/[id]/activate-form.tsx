@@ -145,7 +145,7 @@ export function ActivateForm({
   isPro,
 }: {
   productId: string;
-  /** ID Kartu (short_code) - hanya untuk ditampilkan. */
+  /** Nomor kartu internal (mis. AZA20001) - hanya untuk ditampilkan. */
   shortCode: string;
   // Basic: pelanggan langsung di-redirect ke Google Review, tidak ada
   // alur keluhan sama sekali - jadi WhatsApp owner (dipakai buat
