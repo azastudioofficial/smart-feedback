@@ -6,6 +6,7 @@ import { createServerSupabase, createServiceClient } from "@/lib/supabase/server
 import { extractCloudinaryPublicId } from "@/lib/utils";
 import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
 import { isAllowedCloudinaryUrl, safeHttpUrl } from "@/lib/safe-url";
+import { CARD_TITLE_MAX, CARD_DESCRIPTION_MAX } from "@/lib/feedback-cards";
 
 type ActionResult = { success: boolean; error?: string };
 
@@ -114,6 +115,31 @@ async function iconUsedByOtherStore(
 }
 
 /**
+ * true = URL ikon kartu ini masih dipakai toko LAIN (atau pengecekan gagal)
+ * - jangan dihapus dari Cloudinary. Gagal-aman: kalau ragu, file dibiarkan.
+ */
+async function cardIconUsedElsewhere(
+  url: string,
+  productId: string
+): Promise<boolean> {
+  const service = createServiceClient();
+  for (const column of ["review_card_icon_url", "complaint_card_icon_url"]) {
+    const { data, error } = await service
+      .from("products")
+      .select("id")
+      .eq(column, url)
+      .neq("id", productId)
+      .limit(1);
+    if (error) {
+      console.error("Gagal cek pemakaian ikon kartu:", error.message);
+      return true;
+    }
+    if ((data?.length ?? 0) > 0) return true;
+  }
+  return false;
+}
+
+/**
  * Update pengaturan toko. Pakai client yang IKUT SESI LOGIN (bukan
  * service client) supaya RLS "owner_update_own_product" yang menentukan
  * boleh/tidaknya update - bukan kita yang cek manual di sini.
@@ -131,6 +157,14 @@ export async function updateSettings(
     socialLinks?: SocialLink[];
     connectTitle?: string;
     connectDescription?: string;
+    // Kustomisasi dua kartu pilihan di halaman feedback (Pro).
+    // undefined = jangan diubah; string kosong = kembali ke bawaan.
+    reviewCardTitle?: string;
+    reviewCardDescription?: string;
+    reviewCardIconUrl?: string;
+    complaintCardTitle?: string;
+    complaintCardDescription?: string;
+    complaintCardIconUrl?: string;
   }
 ): Promise<ActionResult> {
   const supabase = await createServerSupabase();
@@ -185,6 +219,14 @@ export async function updateSettings(
     if (data.brandColor && !/^#[0-9a-fA-F]{6}$/.test(data.brandColor)) {
       return { success: false, error: "Warna brand tidak valid." };
     }
+    for (const iconUrl of [data.reviewCardIconUrl, data.complaintCardIconUrl]) {
+      if (iconUrl && !isAllowedCloudinaryUrl(iconUrl)) {
+        return {
+          success: false,
+          error: "URL ikon kartu tidak valid. Upload ulang ikonnya.",
+        };
+      }
+    }
 
     updatePayload.owner_whatsapp = ownerWhatsapp;
     if (data.logoUrl) updatePayload.logo_url = data.logoUrl;
@@ -214,6 +256,38 @@ export async function updateSettings(
     if (typeof data.connectDescription === "string") {
       updatePayload.connect_description = cleanText(data.connectDescription, 140);
     }
+
+    // Dua kartu pilihan: kosong -> NULL -> halaman pelanggan memakai bawaan.
+    if (typeof data.reviewCardTitle === "string") {
+      updatePayload.review_card_title = cleanText(
+        data.reviewCardTitle,
+        CARD_TITLE_MAX
+      );
+    }
+    if (typeof data.reviewCardDescription === "string") {
+      updatePayload.review_card_description = cleanText(
+        data.reviewCardDescription,
+        CARD_DESCRIPTION_MAX
+      );
+    }
+    if (typeof data.reviewCardIconUrl === "string") {
+      updatePayload.review_card_icon_url = data.reviewCardIconUrl || null;
+    }
+    if (typeof data.complaintCardTitle === "string") {
+      updatePayload.complaint_card_title = cleanText(
+        data.complaintCardTitle,
+        CARD_TITLE_MAX
+      );
+    }
+    if (typeof data.complaintCardDescription === "string") {
+      updatePayload.complaint_card_description = cleanText(
+        data.complaintCardDescription,
+        CARD_DESCRIPTION_MAX
+      );
+    }
+    if (typeof data.complaintCardIconUrl === "string") {
+      updatePayload.complaint_card_icon_url = data.complaintCardIconUrl || null;
+    }
   }
 
   // Ikon custom lama hanya relevan untuk Pro. Basic tidak menyentuh
@@ -228,6 +302,23 @@ export async function updateSettings(
     oldIconUrls = iconUrlsOf(current?.social_links);
   }
 
+  // Ikon kartu pilihan yang tersimpan SEKARANG - supaya setelah berhasil
+  // tersimpan kita tahu file mana yang sudah diganti / dihapus owner.
+  let oldReviewIcon: string | null = null;
+  let oldComplaintIcon: string | null = null;
+  const touchesCardIcons =
+    "review_card_icon_url" in updatePayload ||
+    "complaint_card_icon_url" in updatePayload;
+  if (isPro && touchesCardIcons) {
+    const { data: currentCards } = await supabase
+      .from("products")
+      .select("review_card_icon_url, complaint_card_icon_url")
+      .eq("id", productId)
+      .maybeSingle();
+    oldReviewIcon = currentCards?.review_card_icon_url || null;
+    oldComplaintIcon = currentCards?.complaint_card_icon_url || null;
+  }
+
   const { error } = await supabase
     .from("products")
     .update(updatePayload)
@@ -236,6 +327,38 @@ export async function updateSettings(
   if (error) {
     console.error("Gagal update settings:", error.message);
     return { success: false, error: "Gagal menyimpan pengaturan." };
+  }
+
+  // Pengaturan SUDAH tersimpan -> baru bersihkan file ikon kartu lama yang
+  // diganti atau dihapus (best-effort, pola sama dengan ikon "Connect with Us").
+  if (oldReviewIcon || oldComplaintIcon) {
+    // Ikon yang dipakai SETELAH update: nilai baru kalau dikirim, kalau
+    // tidak (kolom tidak disentuh) tetap nilai lama.
+    const nextReview =
+      "review_card_icon_url" in updatePayload
+        ? updatePayload.review_card_icon_url
+        : oldReviewIcon;
+    const nextComplaint =
+      "complaint_card_icon_url" in updatePayload
+        ? updatePayload.complaint_card_icon_url
+        : oldComplaintIcon;
+    const keptCardIcons = new Set(
+      [nextReview, nextComplaint].filter(
+        (u): u is string => typeof u === "string" && u.length > 0
+      )
+    );
+    for (const url of [oldReviewIcon, oldComplaintIcon]) {
+      if (!url) continue;
+      if (keptCardIcons.has(url) || !isAllowedCloudinaryUrl(url)) continue;
+      if (await cardIconUsedElsewhere(url, productId)) continue;
+      const publicId = extractCloudinaryPublicId(url);
+      if (!publicId) continue;
+      try {
+        await deleteCloudinaryImage(publicId);
+      } catch (err) {
+        console.error("Gagal hapus ikon kartu lama dari Cloudinary:", err);
+      }
+    }
   }
 
   if (isPro && data.socialLinks) {
