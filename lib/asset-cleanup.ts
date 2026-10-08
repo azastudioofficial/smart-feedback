@@ -192,6 +192,18 @@ export async function collectProductAssets(
     urls.push((link as { icon_url?: string | null } | null)?.icon_url);
   }
 
+  // Ikon dua kartu pilihan (halaman feedback). Dibaca TERPISAH dan
+  // gagal-aman: kalau kolomnya belum ada, pembersihan logo/cover/ikon lain
+  // di atas tetap berjalan seperti biasa.
+  const { data: cardIcons, error: cardIconsError } = await service
+    .from("products")
+    .select("review_card_icon_url, complaint_card_icon_url")
+    .eq("id", productId)
+    .maybeSingle();
+  if (!cardIconsError) {
+    urls.push(cardIcons?.review_card_icon_url, cardIcons?.complaint_card_icon_url);
+  }
+
   const storage: StorageRef[] = [];
   const logoRef = legacyLogoRef(product?.logo_url);
   if (logoRef) storage.push(logoRef);
