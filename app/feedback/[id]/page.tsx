@@ -9,6 +9,12 @@ import { darkenHex, lightenHex } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeedbackCard } from "./feedback-card";
 
+// Halaman pelanggan HARUS dirender ulang di setiap kunjungan. Tanpa ini Next.js
+// boleh menganggapnya halaman statis (tidak memakai cookies/headers) dan
+// menyimpannya, sehingga perubahan ikon/judul/keterangan kartu dari dasbor
+// owner tidak langsung terlihat.
+export const dynamic = "force-dynamic";
+
 type Props = {
   params: Promise<{ id: string }>;
 };
