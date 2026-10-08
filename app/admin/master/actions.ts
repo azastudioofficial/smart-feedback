@@ -682,9 +682,31 @@ export async function resetAndUnbind(productId: string): Promise<ActionResult> {
         tagline: null,
         terms_accepted_at: null,
         social_links: [],
+        // Teks "Terhubung dengan Kami" juga milik toko lama - klien baru
+        // tidak boleh mewarisinya.
+        connect_title: null,
+        connect_description: null,
       })
       .eq("id", productId),
   ]);
+
+  // Kustomisasi dua kartu pilihan toko lama (file ikonnya sudah ikut
+  // dibersihkan lewat collectProductAssets di atas). Update terpisah &
+  // best-effort supaya reset tidak gagal kalau kolomnya belum ada.
+  const { error: cardResetError } = await service
+    .from("products")
+    .update({
+      review_card_title: null,
+      review_card_description: null,
+      review_card_icon_url: null,
+      complaint_card_title: null,
+      complaint_card_description: null,
+      complaint_card_icon_url: null,
+    })
+    .eq("id", productId);
+  if (cardResetError) {
+    console.error("Gagal mengosongkan kustomisasi kartu:", cardResetError.message);
+  }
 
   const statsError =
     scanDel.error ??
