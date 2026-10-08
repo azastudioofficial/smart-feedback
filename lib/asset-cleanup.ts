@@ -325,3 +325,138 @@ export async function retryPendingCleanups(
     still_pending: stillPending,
   };
 }
+
+/**
+ * Hapus file Cloudinary berdasarkan URL-nya. Hasil Admin API DIPERIKSA, dan
+ * file yang gagal dihapus (kunci API belum diisi, Cloudinary sedang error,
+ * dll) dicatat ke admin_actions supaya cron harian mencobanya lagi - jadi
+ * tidak ada file yang diam-diam menumpuk di Cloudinary.
+ * Tidak pernah melempar error: operasi utama owner tidak boleh ikut gagal.
+ */
+export async function purgeCloudinaryUrls(
+  urls: Array<string | null | undefined>,
+  context: string
+): Promise<void> {
+  const ids = publicIdsFromUrls(urls);
+  if (ids.length === 0) return;
+  try {
+    const service = createServiceClient();
+    const { failed, errors } = await purgeAssets(service, {
+      cloudinaryIds: ids,
+      storage: [],
+    });
+    await recordPendingCleanup(service, context, failed, errors);
+  } catch (err) {
+    console.error(`[asset-cleanup] ${context}:`, err);
+    try {
+      await recordPendingCleanup(
+        createServiceClient(),
+        context,
+        { cloudinaryIds: ids, storage: [] },
+        [err instanceof Error ? err.message : "Gagal membersihkan file."]
+      );
+    } catch {
+      // Sudah tercatat di log server di atas.
+    }
+  }
+}
+
+/**
+ * true = URL ini masih dipakai di database (logo, sampul, ikon kartu, ikon
+ * Connect with Us, atau foto keluhan) - ATAU pengecekan gagal. Gagal-aman:
+ * kalau ragu, file dibiarkan.
+ */
+export async function urlStillReferenced(url: string): Promise<boolean> {
+  const service = createServiceClient();
+  for (const column of [
+    "logo_url",
+    "cover_image_url",
+    "review_card_icon_url",
+    "complaint_card_icon_url",
+  ]) {
+    const { data, error } = await service
+      .from("products")
+      .select("id")
+      .eq(column, url)
+      .limit(1);
+    if (error) {
+      console.error("Gagal cek pemakaian file:", error.message);
+      return true;
+    }
+    if ((data?.length ?? 0) > 0) return true;
+  }
+
+  const { data: social, error: socialError } = await service
+    .from("products")
+    .select("id")
+    .contains("social_links", [{ icon_url: url }])
+    .limit(1);
+  if (socialError) {
+    console.error("Gagal cek pemakaian ikon:", socialError.message);
+    return true;
+  }
+  if ((social?.length ?? 0) > 0) return true;
+
+  const { data: photos, error: photoError } = await service
+    .from("feedbacks")
+    .select("id")
+    .eq("photo_url", url)
+    .limit(1);
+  if (photoError) {
+    console.error("Gagal cek pemakaian foto:", photoError.message);
+    return true;
+  }
+  return (photos?.length ?? 0) > 0;
+}
+
+/**
+ * true HANYA kalau file ini benar-benar baru diupload (maks 6 jam). Dipakai
+ * supaya action pembuangan upload di bawah tidak bisa dipakai menghapus
+ * file lama yang bukan upload owner (mis. gambar landing page).
+ * Gagal-aman: kalau tidak bisa memastikan, hasilnya false.
+ */
+export async function isRecentCloudinaryUpload(url: string): Promise<boolean> {
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  const publicId = extractCloudinaryPublicId(url);
+  if (!cloudName || !apiKey || !apiSecret || !publicId) return false;
+
+  try {
+    const path = publicId.split("/").map(encodeURIComponent).join("/");
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload/${path}`,
+      { headers: { Authorization: `Basic ${btoa(`${apiKey}:${apiSecret}`)}` } }
+    );
+    if (!res.ok) return false;
+    const info = (await res.json()) as { created_at?: string };
+    const created = info.created_at ? Date.parse(info.created_at) : NaN;
+    if (!Number.isFinite(created)) return false;
+    return Date.now() - created < 6 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Buang 1 file yang baru diupload tapi TIDAK jadi dipakai (simpan gagal,
+ * dibatalkan, diganti). Tiga pagar sekaligus, semuanya gagal-aman:
+ *   1. URL harus Cloudinary milik kita,
+ *   2. tidak boleh masih dipakai di database,
+ *   3. file harus baru diupload (maks 6 jam) - gambar lama yang bukan
+ *      upload pengguna tidak bisa dihapus lewat jalur ini.
+ * Tidak pernah melempar error.
+ */
+export async function discardUnreferencedUpload(
+  url: string,
+  context: string
+): Promise<void> {
+  try {
+    if (!isAllowedCloudinaryUrl(url)) return;
+    if (await urlStillReferenced(url)) return;
+    if (!(await isRecentCloudinaryUpload(url))) return;
+    await purgeCloudinaryUrls([url], context);
+  } catch (err) {
+    console.error(`[asset-cleanup] ${context}:`, err);
+  }
+}
