@@ -42,6 +42,26 @@ const getProduct = cache(async (id: string) => {
     .maybeSingle();
 });
 
+// Kustomisasi dua kartu pilihan (ikon/judul/keterangan dari owner Pro).
+// Dibaca TERPISAH dan gagal-aman: kalau kolomnya belum ada di database
+// (sql/16 belum dijalankan) atau query gagal, halaman pelanggan tetap
+// tampil normal dengan teks & ikon bawaan.
+const getCardCustomization = cache(async (id: string) => {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      "review_card_title, review_card_description, review_card_icon_url, complaint_card_title, complaint_card_description, complaint_card_icon_url"
+    )
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.error("Gagal ambil kustomisasi kartu:", error.message);
+    return null;
+  }
+  return data;
+});
+
 // Judul tab = nama toko (bukan nama aplikasi), dan halaman ini tidak perlu
 // muncul di hasil pencarian Google - ini halaman pelanggan sekali pakai.
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -67,6 +87,7 @@ export async function generateViewport({ params }: Props): Promise<Viewport> {
 export default async function FeedbackPage({ params }: Props) {
   const { id } = await params;
   const { data: product, error } = await getProduct(id);
+  const cardCustom = await getCardCustomization(id);
 
   if (error || !product) {
     notFound();
@@ -152,7 +173,7 @@ export default async function FeedbackPage({ params }: Props) {
       />
 
       <div className="relative z-10 flex min-h-[100dvh] w-full justify-center sm:min-h-0 sm:w-auto">
-        <FeedbackCard product={product} />
+        <FeedbackCard product={{ ...product, ...(cardCustom ?? {}) }} />
       </div>
     </main>
   );
