@@ -1,7 +1,13 @@
 "use client";
 // app/dashboard/settings-form.tsx
 
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   SlidersHorizontal,
   ImageIcon,
@@ -12,6 +18,8 @@ import {
   Pencil,
   X,
   ExternalLink,
+  MapPin,
+  MessageSquareCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +35,12 @@ import {
   removeLogo,
   removeCoverImage,
 } from "./actions";
+import {
+  REVIEW_CARD_DEFAULT,
+  COMPLAINT_CARD_DEFAULT,
+  CARD_TITLE_MAX,
+  CARD_DESCRIPTION_MAX,
+} from "@/lib/feedback-cards";
 import { useStore } from "./store-context";
 import {
   SOCIAL_PLATFORM_META,
@@ -50,9 +64,134 @@ type Product = {
   social_links?: SocialLink[] | null;
   connect_title?: string | null;
   connect_description?: string | null;
+  review_card_title?: string | null;
+  review_card_description?: string | null;
+  review_card_icon_url?: string | null;
+  complaint_card_title?: string | null;
+  complaint_card_description?: string | null;
+  complaint_card_icon_url?: string | null;
 };
 
 const HEADING = { fontFamily: "var(--font-admin-heading)" };
+
+// Satu blok kustomisasi untuk SATU kartu pilihan di halaman feedback
+// (ikon + judul + keterangan). Kosong = pelanggan melihat bawaan; teks
+// abu-abu di kolom (placeholder) adalah teks bawaan itu sendiri.
+function CardCustomizer({
+  heading,
+  accent,
+  defaults,
+  defaultIcon,
+  title,
+  description,
+  iconUrl,
+  uploading,
+  onTitle,
+  onDescription,
+  onPickIcon,
+  onClearIcon,
+  onReset,
+}: {
+  heading: string;
+  accent: string;
+  defaults: { title: string; description: string };
+  defaultIcon: ReactNode;
+  title: string;
+  description: string;
+  iconUrl: string | null;
+  uploading: boolean;
+  onTitle: (v: string) => void;
+  onDescription: (v: string) => void;
+  onPickIcon: () => void;
+  onClearIcon: () => void;
+  onReset: () => void;
+}) {
+  const customized = !!(title.trim() || description.trim() || iconUrl);
+  return (
+    <div className="space-y-2.5 rounded-xl border border-black/[0.07] bg-[#F6F8F7] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-[#132320]/70">{heading}</p>
+        {customized && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-[11px] font-medium text-[#0E7C86] hover:underline"
+          >
+            Kembalikan ke bawaan
+          </button>
+        )}
+      </div>
+      <div className="flex items-start gap-3">
+        <div className="flex flex-col items-center gap-1">
+          <button
+            type="button"
+            onClick={onPickIcon}
+            disabled={uploading}
+            title="Klik untuk pakai ikon sendiri"
+            aria-label={`Ganti ikon ${heading}`}
+            className="group relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg ring-1 ring-black/[0.06]"
+            style={
+              iconUrl
+                ? { backgroundColor: "white" }
+                : {
+                    backgroundColor: `color-mix(in srgb, ${accent} 14%, white)`,
+                    color: accent,
+                  }
+            }
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#132320]/50" />
+            ) : iconUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={cloudinaryThumbnail(iconUrl, "f_auto,q_auto,w_88")}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-contain p-1"
+              />
+            ) : (
+              defaultIcon
+            )}
+            {!uploading && (
+              <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white group-hover:flex">
+                <Pencil className="h-3.5 w-3.5" />
+              </span>
+            )}
+          </button>
+          {iconUrl && !uploading && (
+            <button
+              type="button"
+              onClick={onClearIcon}
+              className="text-[10px] font-medium text-[#132320]/50 hover:text-red-600"
+            >
+              Hapus
+            </button>
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <Input
+            value={title}
+            onChange={(e) => onTitle(e.target.value)}
+            maxLength={CARD_TITLE_MAX}
+            placeholder={defaults.title}
+            aria-label={`Judul ${heading}`}
+            className="h-11 bg-white text-sm"
+          />
+          <Input
+            value={description}
+            onChange={(e) => onDescription(e.target.value)}
+            maxLength={CARD_DESCRIPTION_MAX}
+            placeholder={defaults.description}
+            aria-label={`Keterangan ${heading}`}
+            className="h-11 bg-white text-sm"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // Shell kartu ini SAMA persis polanya (glass + shadow berlapis) dengan
 // kartu di halaman feedback pelanggan - lihat feedback-card.tsx.
@@ -190,6 +329,70 @@ export function SettingsForm({
   const [connectDescription, setConnectDescription] = useState(
     product.connect_description ?? ""
   );
+
+  // Kustomisasi dua kartu pilihan di halaman feedback (opsional, Pro).
+  // Kosong = pelanggan melihat teks & ikon bawaan.
+  const [reviewCardTitle, setReviewCardTitle] = useState(
+    product.review_card_title ?? ""
+  );
+  const [reviewCardDescription, setReviewCardDescription] = useState(
+    product.review_card_description ?? ""
+  );
+  const [reviewCardIconUrl, setReviewCardIconUrl] = useState<string | null>(
+    product.review_card_icon_url ?? null
+  );
+  const [complaintCardTitle, setComplaintCardTitle] = useState(
+    product.complaint_card_title ?? ""
+  );
+  const [complaintCardDescription, setComplaintCardDescription] = useState(
+    product.complaint_card_description ?? ""
+  );
+  const [complaintCardIconUrl, setComplaintCardIconUrl] = useState<
+    string | null
+  >(product.complaint_card_icon_url ?? null);
+
+  // Upload ikon kartu langsung begitu dipilih (pola sama dengan ikon
+  // "Connect with Us"). File ikon lama dibersihkan server setelah Simpan.
+  const cardIconInputRef = useRef<HTMLInputElement>(null);
+  const [cardIconTarget, setCardIconTarget] = useState<
+    "review" | "complaint" | null
+  >(null);
+  const [uploadingCardIcon, setUploadingCardIcon] = useState<
+    "review" | "complaint" | null
+  >(null);
+
+  function triggerCardIconUpload(which: "review" | "complaint") {
+    setCardIconTarget(which);
+    cardIconInputRef.current?.click();
+  }
+
+  async function handleCardIconSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const target = cardIconTarget;
+    e.target.value = "";
+    if (!file || !target) return;
+
+    if (file.size > 12 * 1024 * 1024) {
+      alert("Ukuran gambar terlalu besar (maks 12MB). Coba gambar lain.");
+      return;
+    }
+
+    setUploadingCardIcon(target);
+    try {
+      const compressed = await compressIconImage(file);
+      const uploadedUrl = await uploadToCloudinaryWithProgress(
+        compressed,
+        () => {}
+      );
+      if (target === "review") setReviewCardIconUrl(uploadedUrl);
+      else setComplaintCardIconUrl(uploadedUrl);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Gagal mengupload ikon.");
+    } finally {
+      setUploadingCardIcon(null);
+      setCardIconTarget(null);
+    }
+  }
 
   function handleAddSocialLink() {
     setSocialLinks((prev) => [
@@ -437,6 +640,14 @@ export function SettingsForm({
         // Hanya Pro yang punya bagian ini; di Basic jangan menimpa nilai lama.
         connectTitle: isPro ? connectTitle : undefined,
         connectDescription: isPro ? connectDescription : undefined,
+        // Dua kartu pilihan (Pro). String kosong = kembali ke bawaan;
+        // undefined (Basic) = jangan menimpa nilai lama.
+        reviewCardTitle: isPro ? reviewCardTitle : undefined,
+        reviewCardDescription: isPro ? reviewCardDescription : undefined,
+        reviewCardIconUrl: isPro ? (reviewCardIconUrl ?? "") : undefined,
+        complaintCardTitle: isPro ? complaintCardTitle : undefined,
+        complaintCardDescription: isPro ? complaintCardDescription : undefined,
+        complaintCardIconUrl: isPro ? (complaintCardIconUrl ?? "") : undefined,
       });
 
       if (!result.success) {
@@ -703,6 +914,73 @@ export function SettingsForm({
               title="Warna custom"
             />
             <span className="text-xs text-[#132320]/50">{brandColor}</span>
+          </div>
+        </div>
+        )}
+
+        {/* Dua kartu pilihan di halaman feedback pelanggan: ikon, judul, dan
+            keterangannya bisa diganti owner. Kosong = tampilan bawaan.
+            Hanya Pro (Basic tidak punya halaman feedback sendiri). */}
+        {isPro && (
+        <div className="border-t border-black/[0.06] pt-5">
+          <Label className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5 text-[#132320]/40" />
+            Kartu di Halaman Feedback (Opsional)
+          </Label>
+          <p className="mt-1 text-xs text-[#132320]/45">
+            Ini dua kartu pilihan yang dilihat pelanggan setelah scan. Ganti
+            ikon dan tulisannya sesuai usahamu - klik ikon di kiri untuk
+            pakai gambar sendiri. Kosongkan untuk memakai tampilan bawaan
+            (teks abu-abu di kolom adalah teks bawaannya).
+          </p>
+
+          <input
+            ref={cardIconInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleCardIconSelected}
+          />
+
+          <div className="mt-3 space-y-2.5">
+            <CardCustomizer
+              heading="Kartu Review (Google Maps)"
+              accent={brandColor}
+              defaults={REVIEW_CARD_DEFAULT}
+              defaultIcon={<MapPin className="h-5 w-5" />}
+              title={reviewCardTitle}
+              description={reviewCardDescription}
+              iconUrl={reviewCardIconUrl}
+              uploading={uploadingCardIcon === "review"}
+              onTitle={setReviewCardTitle}
+              onDescription={setReviewCardDescription}
+              onPickIcon={() => triggerCardIconUpload("review")}
+              onClearIcon={() => setReviewCardIconUrl(null)}
+              onReset={() => {
+                setReviewCardTitle("");
+                setReviewCardDescription("");
+                setReviewCardIconUrl(null);
+              }}
+            />
+            <CardCustomizer
+              heading="Kartu Layanan Pelanggan"
+              accent="#2F7D5B"
+              defaults={COMPLAINT_CARD_DEFAULT}
+              defaultIcon={<MessageSquareCheck className="h-5 w-5" />}
+              title={complaintCardTitle}
+              description={complaintCardDescription}
+              iconUrl={complaintCardIconUrl}
+              uploading={uploadingCardIcon === "complaint"}
+              onTitle={setComplaintCardTitle}
+              onDescription={setComplaintCardDescription}
+              onPickIcon={() => triggerCardIconUpload("complaint")}
+              onClearIcon={() => setComplaintCardIconUrl(null)}
+              onReset={() => {
+                setComplaintCardTitle("");
+                setComplaintCardDescription("");
+                setComplaintCardIconUrl(null);
+              }}
+            />
           </div>
         </div>
         )}
