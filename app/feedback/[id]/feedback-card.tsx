@@ -43,6 +43,11 @@ import {
 import { submitFeedback, logPositiveClick } from "./actions";
 import { safeHttpUrl } from "@/lib/safe-url";
 import {
+  REVIEW_CARD_DEFAULT,
+  COMPLAINT_CARD_DEFAULT,
+  resolveCardText,
+} from "@/lib/feedback-cards";
+import {
   SOCIAL_PLATFORM_META,
   socialLinkDisplayLabel,
   splitSocialLinksByGroup,
@@ -72,7 +77,40 @@ type Product = {
   // (opsional). Kosong -> pakai teks bawaan yang netral.
   connect_title?: string | null;
   connect_description?: string | null;
+  // Kustomisasi dua kartu pilihan (opsional, Pro). Kosong -> bawaan.
+  review_card_title?: string | null;
+  review_card_description?: string | null;
+  review_card_icon_url?: string | null;
+  complaint_card_title?: string | null;
+  complaint_card_description?: string | null;
+  complaint_card_icon_url?: string | null;
 };
+
+// Ikon kartu: gambar buatan owner kalau ada, kalau tidak ikon bawaan.
+// Hanya URL Cloudinary yang disimpan server, tapi tetap diperiksa di sini
+// (safeHttpUrl) supaya nilai aneh yang masuk lewat jalur lain tidak dipakai.
+function CardIcon({
+  url,
+  fallback,
+  className,
+}: {
+  url?: string | null;
+  fallback: ReactNode;
+  className: string;
+}) {
+  const safe = url ? safeHttpUrl(url) : null;
+  if (!safe) return <>{fallback}</>;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={cloudinaryThumbnail(safe, "f_auto,q_auto,w_96")}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className={className}
+    />
+  );
+}
 
 // Kartu aksi bergaya premium: tile ikon besar, judul + deskripsi, "chip"
 // kecil penanda manfaat, dan tombol panah bulat di kanan. Warna tiap
@@ -969,9 +1007,21 @@ export function FeedbackCard({ product }: { product: Product }) {
                 variant="primary"
                 enterDelay={120}
                 accent="var(--brand)"
-                icon={<MapPin className="h-6 w-6" />}
-                title="Bagikan Pengalaman Anda"
-                description="Bantu bisnis kami berkembang dengan ulasan di Google Maps."
+                icon={
+                  <CardIcon
+                    url={product.review_card_icon_url}
+                    fallback={<MapPin className="h-6 w-6" />}
+                    className="h-7 w-7 rounded-md object-contain"
+                  />
+                }
+                title={resolveCardText(
+                  product.review_card_title,
+                  REVIEW_CARD_DEFAULT.title
+                )}
+                description={resolveCardText(
+                  product.review_card_description,
+                  REVIEW_CARD_DEFAULT.description
+                )}
                 chip={
                   <>
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm">
@@ -986,9 +1036,21 @@ export function FeedbackCard({ product }: { product: Product }) {
                 onClick={() => setStep("form")}
                 enterDelay={200}
                 accent="#2F7D5B"
-                icon={<MessageSquareCheck className="h-6 w-6" />}
-                title="Hubungi Layanan Pelanggan"
-                description="Dapatkan bantuan cepat atau solusi masalah."
+                icon={
+                  <CardIcon
+                    url={product.complaint_card_icon_url}
+                    fallback={<MessageSquareCheck className="h-6 w-6" />}
+                    className="h-7 w-7 rounded-md object-contain"
+                  />
+                }
+                title={resolveCardText(
+                  product.complaint_card_title,
+                  COMPLAINT_CARD_DEFAULT.title
+                )}
+                description={resolveCardText(
+                  product.complaint_card_description,
+                  COMPLAINT_CARD_DEFAULT.description
+                )}
                 chip={
                   <>
                     <span
@@ -1042,14 +1104,24 @@ export function FeedbackCard({ product }: { product: Product }) {
                         boxShadow: "inset 0 0 0 1px color-mix(in srgb, #2F7D5B 14%, white)",
                       }}
                     >
-                      <MessageSquareCheck className="h-5 w-5" />
+                      <CardIcon
+                        url={product.complaint_card_icon_url}
+                        fallback={<MessageSquareCheck className="h-5 w-5" />}
+                        className="h-6 w-6 rounded-md object-contain"
+                      />
                     </span>
                     <div className="min-w-0">
                       <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#132320]">
-                        Hubungi Layanan Pelanggan
+                        {resolveCardText(
+                          product.complaint_card_title,
+                          COMPLAINT_CARD_DEFAULT.title
+                        )}
                       </p>
                       <p className="mt-0.5 text-[12px] text-[#132320]/68">
-                        Dapatkan bantuan cepat atau solusi masalah.
+                        {resolveCardText(
+                          product.complaint_card_description,
+                          COMPLAINT_CARD_DEFAULT.description
+                        )}
                       </p>
                     </div>
                   </div>
