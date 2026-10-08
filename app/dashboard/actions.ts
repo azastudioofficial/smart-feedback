@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
+import {
+  discardUnreferencedUpload,
+  purgeCloudinaryUrls,
+  urlStillReferenced,
+} from "@/lib/asset-cleanup";
 import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
 import { isAllowedCloudinaryUrl, safeHttpUrl } from "@/lib/safe-url";
 import { CARD_TITLE_MAX, CARD_DESCRIPTION_MAX } from "@/lib/feedback-cards";
@@ -52,37 +57,29 @@ export async function removeSocialIcon(iconUrl: string): Promise<ActionResult> {
     return { success: true };
   }
 
-  const publicId = extractCloudinaryPublicId(iconUrl);
-  if (publicId) {
-    try {
-      await deleteCloudinaryImage(publicId);
-    } catch (err) {
-      console.error("Gagal hapus ikon custom dari Cloudinary:", err);
-      // Tidak fatal - owner tetap bisa lanjut ganti/hapus ikonnya.
-    }
-  }
+  // Tidak fatal bagi owner; kalau gagal, dicatat & dicoba ulang oleh cron.
+  await purgeCloudinaryUrls([iconUrl], "remove-social-icon");
 
   return { success: true };
 }
 
 /**
- * Hapus 1 foto dari Cloudinary lewat Admin API (butuh API Key+Secret,
- * beda dari upload yang unsigned dari browser).
+ * Buang file yang baru diupload owner tapi TIDAK jadi disimpan (ikon diganti
+ * sebelum Simpan, dihapus sebelum Simpan, atau Simpan gagal). Aman karena:
+ * wajib login, file yang sudah dipakai di database TIDAK disentuh, dan hanya
+ * file yang baru diupload (<= 6 jam) yang boleh dibuang.
  */
-async function deleteCloudinaryImage(publicId: string): Promise<void> {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const apiKey = process.env.CLOUDINARY_API_KEY;
-  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+export async function discardUnsavedUpload(url: string): Promise<ActionResult> {
+  if (!isAllowedCloudinaryUrl(url)) return { success: true };
 
-  if (!cloudName || !apiKey || !apiSecret) return;
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Silakan login ulang." };
 
-  const auth = btoa(`${apiKey}:${apiSecret}`);
-  await fetch(
-    `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload?public_ids[]=${encodeURIComponent(
-      publicId
-    )}`,
-    { method: "DELETE", headers: { Authorization: `Basic ${auth}` } }
-  );
+  await discardUnreferencedUpload(url, "discard-unsaved-upload");
+  return { success: true };
 }
 
 /** Daftar icon_url (tidak kosong) dari isi kolom social_links. */
@@ -323,6 +320,20 @@ export async function updateSettings(
   // .select("id") = minta database mengembalikan baris yang BENAR-BENAR
   // ter-update. Tanpa ini, update yang ditolak diam-diam oleh RLS (0 baris)
   // tidak menghasilkan error apa pun dan form tetap menulis "berhasil".
+  // Logo & foto sampul yang tersimpan SEKARANG - kalau owner mengunggah yang
+  // baru, file lamanya harus ikut dibersihkan di Cloudinary setelah Simpan.
+  let oldLogoUrl: string | null = null;
+  let oldCoverUrl: string | null = null;
+  if (isPro && (data.logoUrl || data.coverImageUrl)) {
+    const { data: currentImages } = await supabase
+      .from("products")
+      .select("logo_url, cover_image_url")
+      .eq("id", productId)
+      .maybeSingle();
+    oldLogoUrl = (currentImages?.logo_url as string | null) || null;
+    oldCoverUrl = (currentImages?.cover_image_url as string | null) || null;
+  }
+
   const { data: updatedRows, error } = await supabase
     .from("products")
     .update(updatePayload)
@@ -347,6 +358,22 @@ export async function updateSettings(
   revalidatePath("/dashboard");
   revalidatePath(`/feedback/${productId}`);
 
+  // Logo / foto sampul yang DIGANTI: file lamanya sudah tidak dipakai.
+  // urlStillReferenced dicek SETELAH update, jadi kalau masih ada yang
+  // memakai URL itu, berarti toko lain - dibiarkan.
+  const replacedImages: string[] = [];
+  if (data.logoUrl && oldLogoUrl && oldLogoUrl !== data.logoUrl) {
+    replacedImages.push(oldLogoUrl);
+  }
+  if (data.coverImageUrl && oldCoverUrl && oldCoverUrl !== data.coverImageUrl) {
+    replacedImages.push(oldCoverUrl);
+  }
+  for (const url of replacedImages) {
+    if (!isAllowedCloudinaryUrl(url)) continue;
+    if (await urlStillReferenced(url)) continue;
+    await purgeCloudinaryUrls([url], "settings-replaced-image");
+  }
+
   // Pengaturan SUDAH tersimpan -> baru bersihkan file ikon kartu lama yang
   // diganti atau dihapus (best-effort, pola sama dengan ikon "Connect with Us").
   if (oldReviewIcon || oldComplaintIcon) {
@@ -369,13 +396,7 @@ export async function updateSettings(
       if (!url) continue;
       if (keptCardIcons.has(url) || !isAllowedCloudinaryUrl(url)) continue;
       if (await cardIconUsedElsewhere(url, productId)) continue;
-      const publicId = extractCloudinaryPublicId(url);
-      if (!publicId) continue;
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus ikon kartu lama dari Cloudinary:", err);
-      }
+      await purgeCloudinaryUrls([url], "settings-card-icon");
     }
   }
 
@@ -384,13 +405,7 @@ export async function updateSettings(
     for (const url of oldIconUrls) {
       if (kept.has(url) || !isAllowedCloudinaryUrl(url)) continue;
       if (await iconUsedByOtherStore(url, productId)) continue;
-      const publicId = extractCloudinaryPublicId(url);
-      if (!publicId) continue;
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus ikon lama dari Cloudinary:", err);
-      }
+      await purgeCloudinaryUrls([url], "settings-social-icon");
     }
   }
 
@@ -420,16 +435,25 @@ export async function removeLogo(
   }
   logoUrl = (own.logo_url as string | null) ?? "";
 
+  // Kosongkan di database DULU. Kalau urutannya dibalik dan update ini gagal,
+  // file sudah terhapus sementara URL-nya masih tersimpan (gambar rusak).
+  const { error } = await supabase
+    .from("products")
+    .update({ logo_url: null })
+    .eq("id", productId);
+
+  if (error) {
+    console.error("Gagal hapus logo dari database:", error.message);
+    return { success: false, error: "Gagal menghapus logo." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/feedback/${productId}`);
+
   if (isAllowedCloudinaryUrl(logoUrl)) {
-    // Logo baru (di Cloudinary) - hapus lewat Admin API
-    const publicId = extractCloudinaryPublicId(logoUrl);
-    if (publicId) {
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus logo dari Cloudinary:", err);
-        // Tidak fatal - tetap lanjut kosongkan logo_url
-      }
+    // Logo baru (di Cloudinary). Kalau gagal, dicatat & dicoba ulang cron.
+    if (!(await urlStillReferenced(logoUrl))) {
+      await purgeCloudinaryUrls([logoUrl], "remove-logo");
     }
   } else {
     // Logo LAMA (masih di Supabase Storage, sebelum perbaikan ini)
@@ -445,16 +469,6 @@ export async function removeLogo(
         console.error("Gagal hapus file logo lama:", storageError.message);
       }
     }
-  }
-
-  const { error } = await supabase
-    .from("products")
-    .update({ logo_url: null })
-    .eq("id", productId);
-
-  if (error) {
-    console.error("Gagal hapus logo dari database:", error.message);
-    return { success: false, error: "Gagal menghapus logo." };
   }
 
   return { success: true };
@@ -481,17 +495,7 @@ export async function removeCoverImage(
   }
   coverImageUrl = (own.cover_image_url as string | null) ?? "";
 
-  if (isAllowedCloudinaryUrl(coverImageUrl)) {
-    const publicId = extractCloudinaryPublicId(coverImageUrl);
-    if (publicId) {
-      try {
-        await deleteCloudinaryImage(publicId);
-      } catch (err) {
-        console.error("Gagal hapus cover dari Cloudinary:", err);
-      }
-    }
-  }
-
+  // Database dulu, baru file (alasan sama dengan removeLogo).
   const { error } = await supabase
     .from("products")
     .update({ cover_image_url: null, cover_position: null })
@@ -500,6 +504,16 @@ export async function removeCoverImage(
   if (error) {
     console.error("Gagal hapus cover dari database:", error.message);
     return { success: false, error: "Gagal menghapus foto sampul." };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/feedback/${productId}`);
+
+  if (
+    isAllowedCloudinaryUrl(coverImageUrl) &&
+    !(await urlStillReferenced(coverImageUrl))
+  ) {
+    await purgeCloudinaryUrls([coverImageUrl], "remove-cover");
   }
 
   return { success: true };
@@ -554,7 +568,7 @@ export async function updateFeedbackStatus(
 
 /**
  * Hapus foto dari Cloudinary dan KEMBALIKAN hasilnya (true = beres).
- * Beda dengan deleteCloudinaryImage di atas yang best-effort dan diam
+ * Beda dengan purgeCloudinaryUrls (lib/asset-cleanup.ts) yang best-effort dan diam
  * saja kalau gagal: untuk hapus manual keluhan kita perlu tahu hasilnya,
  * karena kalau baris database sudah terhapus tapi fotonya masih ada di
  * Cloudinary, foto itu jadi yatim dan tidak akan pernah dibersihkan cron
