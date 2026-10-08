@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { buildWhatsappMessage, buildWhatsappUrl, generateShortCode, slugify } from "@/lib/utils";
 import { isAllowedCloudinaryUrl } from "@/lib/safe-url";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { discardUnreferencedUpload } from "@/lib/asset-cleanup";
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -66,6 +67,17 @@ export async function submitFeedback(
 
   const service = createServiceClient();
 
+  // Foto sudah diupload browser SEBELUM fungsi ini dipanggil. Kalau pengiriman
+  // gagal di bawah (toko tidak aktif, terlalu banyak pesan, database error),
+  // foto itu tidak akan pernah terhubung ke keluhan mana pun - buang supaya
+  // tidak menumpuk di Cloudinary. Aman: file yang sudah tersimpan di keluhan
+  // atau yang bukan upload baru tidak disentuh (lihat discardUnreferencedUpload).
+  const dropPhoto = async () => {
+    if (input.photoUrl) {
+      await discardUnreferencedUpload(input.photoUrl, "feedback-submit-failed");
+    }
+  };
+
   // Ambil data toko langsung dari server (jangan percaya data dari client)
   const { data: product, error: productError } = await service
     .from("products")
@@ -74,15 +86,18 @@ export async function submitFeedback(
     .maybeSingle();
 
   if (productError || !product) {
+    await dropPhoto();
     return { success: false, error: "Toko tidak ditemukan." };
   }
 
   if (!product.is_active || product.is_suspended) {
+    await dropPhoto();
     return { success: false, error: "Layanan ini sedang tidak aktif." };
   }
 
   // Form keluhan hanya untuk paket Pro (dicek di server, bukan cuma di UI).
   if (product.plan !== "pro") {
+    await dropPhoto();
     return { success: false, error: "Layanan ini sedang tidak aktif." };
   }
 
@@ -95,6 +110,7 @@ export async function submitFeedback(
     .gte("created_at", since);
 
   if ((recentCount ?? 0) >= RATE_LIMIT_MAX) {
+    await dropPhoto();
     return {
       success: false,
       error: "Terlalu banyak pesan masuk saat ini. Coba lagi beberapa menit lagi.",
@@ -120,6 +136,7 @@ export async function submitFeedback(
 
   if (insertError || !insertedFeedback) {
     console.error("Gagal simpan feedback:", insertError?.message);
+    await dropPhoto();
     return { success: false, error: "Gagal menyimpan keluhan. Coba lagi." };
   }
 
