@@ -81,7 +81,7 @@ export default async function DashboardPage() {
   const { data: products } = await supabase
     .from("products")
     .select(
-      "id, short_code, business_name, google_review_url, owner_whatsapp, logo_url, cover_image_url, cover_position, brand_color, social_links, connect_title, connect_description, plan"
+      "id, short_code, business_name, google_review_url, owner_whatsapp, logo_url, cover_image_url, cover_position, brand_color, social_links, connect_title, connect_description, review_card_title, review_card_description, review_card_icon_url, complaint_card_title, complaint_card_description, complaint_card_icon_url, plan"
     )
     .eq("owner_id", user.id)
     .order("created_at", { ascending: true });
