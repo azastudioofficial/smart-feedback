@@ -34,6 +34,12 @@ type Product = {
   social_links?: SocialLink[] | null;
   connect_title?: string | null;
   connect_description?: string | null;
+  review_card_title?: string | null;
+  review_card_description?: string | null;
+  review_card_icon_url?: string | null;
+  complaint_card_title?: string | null;
+  complaint_card_description?: string | null;
+  complaint_card_icon_url?: string | null;
 };
 
 type Feedback = {
