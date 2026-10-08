@@ -2,6 +2,7 @@
 // app/dashboard/actions.ts
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { extractCloudinaryPublicId } from "@/lib/utils";
 import { sanitizeSocialLinks, type SocialLink } from "@/lib/social-links";
@@ -319,15 +320,32 @@ export async function updateSettings(
     oldComplaintIcon = currentCards?.complaint_card_icon_url || null;
   }
 
-  const { error } = await supabase
+  // .select("id") = minta database mengembalikan baris yang BENAR-BENAR
+  // ter-update. Tanpa ini, update yang ditolak diam-diam oleh RLS (0 baris)
+  // tidak menghasilkan error apa pun dan form tetap menulis "berhasil".
+  const { data: updatedRows, error } = await supabase
     .from("products")
     .update(updatePayload)
-    .eq("id", productId);
+    .eq("id", productId)
+    .select("id");
 
   if (error) {
     console.error("Gagal update settings:", error.message);
     return { success: false, error: "Gagal menyimpan pengaturan." };
   }
+  if (!updatedRows || updatedRows.length === 0) {
+    console.error("Update settings: 0 baris berubah (kemungkinan ditolak RLS).");
+    return {
+      success: false,
+      error: "Pengaturan tidak tersimpan (akses ditolak). Silakan login ulang.",
+    };
+  }
+
+  // Segarkan data dasbor (props SettingsForm berasal dari server; tanpa ini
+  // form yang dibuka ulang setelah pindah tab menampilkan nilai LAMA) dan
+  // halaman feedback pelanggan toko ini.
+  revalidatePath("/dashboard");
+  revalidatePath(`/feedback/${productId}`);
 
   // Pengaturan SUDAH tersimpan -> baru bersihkan file ikon kartu lama yang
   // diganti atau dihapus (best-effort, pola sama dengan ikon "Connect with Us").
