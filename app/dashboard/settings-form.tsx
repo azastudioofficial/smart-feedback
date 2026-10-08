@@ -34,6 +34,7 @@ import {
   updateSettings,
   removeLogo,
   removeCoverImage,
+  discardUnsavedUpload,
 } from "./actions";
 import {
   REVIEW_CARD_DEFAULT,
@@ -384,6 +385,13 @@ export function SettingsForm({
         compressed,
         () => {}
       );
+      // Ikon yang diganti sebelum sempat disimpan dibuang dari Cloudinary
+      // (server menolak kalau file itu sudah tersimpan di database).
+      const previousIcon =
+        target === "review" ? reviewCardIconUrl : complaintCardIconUrl;
+      if (previousIcon && previousIcon !== uploadedUrl) {
+        void discardUnsavedUpload(previousIcon);
+      }
       if (target === "review") setReviewCardIconUrl(uploadedUrl);
       else setComplaintCardIconUrl(uploadedUrl);
     } catch (err) {
@@ -402,6 +410,8 @@ export function SettingsForm({
   }
 
   function handleRemoveSocialLink(id: string) {
+    const removedIcon = socialLinks.find((l) => l.id === id)?.icon_url;
+    if (removedIcon) void discardUnsavedUpload(removedIcon);
     // File ikon lama dibersihkan server SETELAH Simpan berhasil
     // (lihat updateSettings), bukan di sini.
     setSocialLinks((prev) => prev.filter((link) => link.id !== id));
@@ -483,6 +493,10 @@ export function SettingsForm({
         compressed,
         () => {}
       );
+      const previousIcon = socialLinks.find((l) => l.id === targetId)?.icon_url;
+      if (previousIcon && previousIcon !== uploadedUrl) {
+        void discardUnsavedUpload(previousIcon);
+      }
       setSocialLinks((prev) =>
         prev.map((link) =>
           link.id === targetId ? { ...link, icon_url: uploadedUrl } : link
@@ -503,6 +517,7 @@ export function SettingsForm({
   function handleRemoveCustomIcon(id: string) {
     const link = socialLinks.find((l) => l.id === id);
     if (!link?.icon_url) return;
+    void discardUnsavedUpload(link.icon_url);
     setSocialLinks((prev) =>
       prev.map((l) => (l.id === id ? { ...l, icon_url: null } : l))
     );
@@ -581,9 +596,12 @@ export function SettingsForm({
     const form = new FormData(e.currentTarget);
     const businessName = String(form.get("businessName") ?? "");
 
+    // Dideklarasikan DI LUAR try supaya blok catch juga tahu file mana yang
+    // sudah terlanjur diupload kalau prosesnya terputus di tengah jalan.
+    let uploadedLogoUrl: string | undefined;
+    let uploadedCoverUrl: string | undefined;
+
     try {
-      let uploadedLogoUrl: string | undefined;
-      let uploadedCoverUrl: string | undefined;
 
       // Alokasi persentase: tiap file yang perlu diupload dapat porsi
       // rata dari 90% pertama, 10% sisanya buat proses simpan ke
@@ -651,6 +669,9 @@ export function SettingsForm({
       });
 
       if (!result.success) {
+        // Simpan gagal -> logo/sampul yang barusan diupload tidak terpakai.
+        if (uploadedLogoUrl) void discardUnsavedUpload(uploadedLogoUrl);
+        if (uploadedCoverUrl) void discardUnsavedUpload(uploadedCoverUrl);
         setError(result.error ?? "Gagal menyimpan.");
         setProgress(0);
         return;
@@ -668,6 +689,10 @@ export function SettingsForm({
         brandColor,
       });
     } catch (err) {
+      // Proses terputus -> file yang sudah terlanjur diupload dibuang
+      // (server menolak kalau file itu ternyata sudah tersimpan).
+      if (uploadedLogoUrl) void discardUnsavedUpload(uploadedLogoUrl);
+      if (uploadedCoverUrl) void discardUnsavedUpload(uploadedCoverUrl);
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
       setProgress(0);
     } finally {
@@ -955,8 +980,12 @@ export function SettingsForm({
               onTitle={setReviewCardTitle}
               onDescription={setReviewCardDescription}
               onPickIcon={() => triggerCardIconUpload("review")}
-              onClearIcon={() => setReviewCardIconUrl(null)}
+              onClearIcon={() => {
+                if (reviewCardIconUrl) void discardUnsavedUpload(reviewCardIconUrl);
+                setReviewCardIconUrl(null);
+              }}
               onReset={() => {
+                if (reviewCardIconUrl) void discardUnsavedUpload(reviewCardIconUrl);
                 setReviewCardTitle("");
                 setReviewCardDescription("");
                 setReviewCardIconUrl(null);
@@ -974,8 +1003,12 @@ export function SettingsForm({
               onTitle={setComplaintCardTitle}
               onDescription={setComplaintCardDescription}
               onPickIcon={() => triggerCardIconUpload("complaint")}
-              onClearIcon={() => setComplaintCardIconUrl(null)}
+              onClearIcon={() => {
+                if (complaintCardIconUrl) void discardUnsavedUpload(complaintCardIconUrl);
+                setComplaintCardIconUrl(null);
+              }}
               onReset={() => {
+                if (complaintCardIconUrl) void discardUnsavedUpload(complaintCardIconUrl);
                 setComplaintCardTitle("");
                 setComplaintCardDescription("");
                 setComplaintCardIconUrl(null);
