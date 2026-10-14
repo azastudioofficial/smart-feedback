@@ -712,9 +712,27 @@ export function FeedbackCard({ product }: { product: Product }) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [sentAnonymously, setSentAnonymously] = useState(false);
+  // Hasil kirim (null = belum dikirim). Dipakai untuk layar sukses supaya
+  // tombol tidak pernah macet di "Mengirim... 100%": anonim, lewat
+  // WhatsApp, atau tersimpan tanpa WhatsApp.
+  const [sent, setSent] = useState<null | {
+    anonymous: boolean;
+    whatsappUrl?: string;
+  }>(null);
   const [reviewing, setReviewing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Setelah keluhan tersimpan, buka WhatsApp otomatis setelah jeda singkat
+  // supaya pelanggan sempat melihat konfirmasi. Kalau browser (mis. browser
+  // dalam aplikasi) memblokirnya, tombol "Buka WhatsApp" tetap tersedia.
+  useEffect(() => {
+    const url = sent?.whatsappUrl;
+    if (!url) return;
+    const t = setTimeout(() => {
+      window.location.href = url;
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [sent]);
 
   const hasCover = Boolean(product.cover_image_url);
   const hasLogo = Boolean(product.logo_url);
@@ -762,6 +780,21 @@ export function FeedbackCard({ product }: { product: Product }) {
     }
   }
 
+  // Kembali ke halaman awal (pilihan Puas / Kurang Puas) setelah sukses.
+  // Mengosongkan form dan membatalkan buka-otomatis WhatsApp yang tertunda
+  // (efeknya dibersihkan otomatis begitu `sent` kembali null).
+  function handleBackToStart() {
+    setSent(null);
+    setStep("choice");
+    setCustomerName("");
+    setComplaintText("");
+    setPhotoFile(null);
+    setAnonymous(false);
+    setError(null);
+    setProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   async function handleSubmitComplaint() {
     setError(null);
 
@@ -807,23 +840,15 @@ export function FeedbackCard({ product }: { product: Product }) {
       }
 
       setProgress(100);
+      setLoading(false);
 
-      // Kirim anonim: TIDAK redirect ke WhatsApp, cukup tampilkan
-      // konfirmasi sukses di halaman ini saja.
-      if (result.anonymous) {
-        setSentAnonymously(true);
-        setLoading(false);
-        return;
-      }
-
-      if (!result.whatsappUrl) {
-        setError(result.error ?? "Gagal mengirim pesan.");
-        setLoading(false);
-        setProgress(0);
-        return;
-      }
-
-      window.location.href = result.whatsappUrl;
+      // Di titik ini keluhan SUDAH tersimpan di dashboard owner. WhatsApp
+      // hanya jalur notifikasi tambahan, jadi tanpa URL WhatsApp pun
+      // pelanggan tetap melihat konfirmasi sukses (bukan pesan error).
+      setSent({
+        anonymous: Boolean(result.anonymous),
+        whatsappUrl: result.anonymous ? undefined : result.whatsappUrl,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan.");
       setLoading(false);
@@ -1068,7 +1093,7 @@ export function FeedbackCard({ product }: { product: Product }) {
 
           {step === "form" && (
             <div className="space-y-5 border-t border-black/[0.06] pt-5">
-              {sentAnonymously ? (
+              {sent ? (
                 <div className="flex flex-col items-center gap-2 rounded-2xl bg-[#F6F8F7] px-5 py-9 text-center">
                   <span className="mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_8px_20px_-10px_rgba(19,35,32,0.35)] ring-1 ring-black/[0.05]">
                     <CheckCircle2 className="h-7 w-7 text-[var(--brand)]" />
@@ -1077,9 +1102,30 @@ export function FeedbackCard({ product }: { product: Product }) {
                     Terima kasih atas masukan Anda
                   </p>
                   <p className="text-sm text-[#132320]/68">
-                    Laporan Anda sudah kami terima secara anonim dan langsung
-                    masuk ke dashboard pemilik toko.
+                    {sent.anonymous
+                      ? "Laporan Anda sudah kami terima secara anonim dan langsung masuk ke dashboard pemilik toko."
+                      : sent.whatsappUrl
+                        ? "Masukan Anda sudah tersimpan. Sebentar lagi WhatsApp terbuka agar pesan bisa langsung diteruskan ke pemilik toko."
+                        : "Masukan Anda sudah kami terima dan masuk ke dashboard pemilik toko."}
                   </p>
+                  {sent.whatsappUrl && (
+                    <a
+                      href={sent.whatsappUrl}
+                      rel="noopener"
+                      className="mt-3 inline-flex h-11 items-center justify-center rounded-2xl bg-[#132320] px-6 text-sm font-semibold text-white transition active:scale-[0.99] hover:bg-[#0B1512]"
+                    >
+                      Buka WhatsApp
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleBackToStart}
+                    className={`inline-flex h-11 items-center justify-center rounded-2xl px-6 text-sm font-medium text-[#132320]/72 transition hover:text-[#132320] ${
+                      sent.whatsappUrl ? "mt-1" : "mt-3"
+                    }`}
+                  >
+                    Kembali ke halaman awal
+                  </button>
                 </div>
               ) : (
                 <>
