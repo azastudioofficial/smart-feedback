@@ -169,12 +169,11 @@ export async function submitFeedback(
     }
   }
 
+  // Nomor WhatsApp owner belum diatur: keluhan sudah tersimpan dan terlihat
+  // di dashboard, jadi tetap SUKSES (tanpa link WA). Mengembalikan error di
+  // sini membuat pelanggan mengira gagal lalu mengirim ulang -> data ganda.
   if (!product.owner_whatsapp) {
-    return {
-      success: false,
-      error:
-        "Keluhan sudah tersimpan, tapi nomor WhatsApp owner belum diatur.",
-    };
+    return { success: true };
   }
 
   const message = buildWhatsappMessage({
