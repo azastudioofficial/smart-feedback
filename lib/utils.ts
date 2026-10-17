@@ -70,6 +70,13 @@ export async function compressComplaintPhoto(file: File): Promise<File> {
     );
   } catch (err) {
     console.error("Gagal kompresi foto:", err);
+    // HP lama / RAM kecil / format tak dikenal (mis. HEIC) kadang gagal
+    // dikompres di browser. Daripada pelanggan terblokir, pakai file asli
+    // selama masih wajar ukurannya (Cloudinary tetap menerima & menyimpannya).
+    const MAX_FALLBACK_BYTES = 8 * 1024 * 1024;
+    if (file.size > 0 && file.size <= MAX_FALLBACK_BYTES) {
+      return file;
+    }
     throw new Error("Gagal memproses foto. Coba gunakan foto lain.");
   }
 }
