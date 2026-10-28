@@ -71,6 +71,8 @@ export async function getInventoryPage(
   success: boolean;
   data?: InventoryItem[];
   totalCount?: number;
+  // Jumlah scan per kartu di halaman ini (id -> jumlah).
+  scanCounts?: Record<string, number>;
   error?: string;
 }> {
   const supabase = await createServerSupabase();
@@ -149,7 +151,24 @@ export async function getInventoryPage(
         ?.name ?? null,
   }));
 
-  return { success: true, data: items, totalCount: count ?? 0 };
+  // Hitungan scan untuk kartu di halaman ini saja (fungsi SQL
+  // product_scan_counts, lihat sql/17). Id berasal dari query products di
+  // atas yang sudah dibatasi RLS, jadi aman dihitung lewat service client.
+  // Kalau gagal, tabel tetap tampil - angka scan-nya saja yang kosong.
+  let scanCounts: Record<string, number> = {};
+  if (items.length > 0) {
+    const { data: counts, error: countError } = await createServiceClient().rpc(
+      "product_scan_counts",
+      { p_product_ids: items.map((i) => i.id) }
+    );
+    if (countError) {
+      console.error("product_scan_counts gagal:", countError.message);
+    } else if (counts) {
+      scanCounts = counts as Record<string, number>;
+    }
+  }
+
+  return { success: true, data: items, totalCount: count ?? 0, scanCounts };
 }
 
 async function logAdminAction(
