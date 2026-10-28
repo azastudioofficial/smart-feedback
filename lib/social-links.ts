@@ -110,7 +110,7 @@ export const SOCIAL_PLATFORM_META: Record<
     label: "WhatsApp",
     icon: WhatsAppIcon,
     color: "#25D366",
-    placeholder: "https://wa.me/62812xxxxxxx",
+    placeholder: "08123456789 (cukup nomor saja)",
   },
   other: {
     label: "Lainnya",
@@ -193,14 +193,136 @@ export function socialLinkDisplayLabel(link: SocialLink): string {
   return link.label?.trim() || SOCIAL_PLATFORM_META[link.platform].label;
 }
 
+// ---------------------------------------------------------------
+// WhatsApp: owner cukup menulis NOMOR (mis. 0812-3456-7890,
+// +62 812 3456 7890, atau 812xxxx). Di sini dirapikan jadi digit
+// berawalan kode negara - siap dipakai untuk https://wa.me/<nomor>.
+// ---------------------------------------------------------------
+
+/**
+ * Rapikan input nomor WhatsApp jadi digit saja berawalan kode negara.
+ * Mengembalikan null kalau bukan nomor yang masuk akal (8-15 digit,
+ * batas E.164).
+ *   "0812-3456-7890"     -> "6281234567890"
+ *   "+62 812 3456 7890"  -> "6281234567890"
+ *   "62812..." / "812..." -> "62812..."
+ */
+export function normalizeWhatsappNumber(raw: string): string | null {
+  const trimmed = raw.trim();
+  let digits = trimmed.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+
+  if (trimmed.startsWith("+")) {
+    // Sudah format internasional - biarkan.
+  } else if (digits.startsWith("00")) {
+    digits = digits.slice(2); // 0062812... -> 62812...
+  } else if (digits.startsWith("0")) {
+    digits = "62" + digits.slice(1); // 0812... -> 62812...
+  } else if (digits.startsWith("8")) {
+    digits = "62" + digits; // 812... -> 62812...
+  }
+  // selain itu (mis. sudah diawali 62 / kode negara lain): biarkan.
+
+  return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
+// Bentuk isian WhatsApp:
+//  - "link"   : sudah berupa link (wa.me, wa.link, api.whatsapp.com,
+//               chat.whatsapp.com, domain apa pun) -> DIPERTAHANKAN apa
+//               adanya (ditambah https:// kalau belum ada). Ini penting
+//               supaya tautan yang sudah tersimpan milik owner lama tidak
+//               hilang atau berubah saat mereka menyimpan pengaturan.
+//  - "number" : nomor telepon -> dijadikan https://wa.me/<nomor>.
+//  - null     : bukan keduanya -> tidak valid.
+type WhatsappInput =
+  | { kind: "link"; url: string }
+  | { kind: "number"; digits: string }
+  | null;
+
+/**
+ * Perbaiki link wa.me yang nomornya salah format NASIONAL:
+ *   https://wa.me/089639434073   -> https://wa.me/6289639434073
+ *   https://wa.me/0062896...     -> https://wa.me/62896...
+ * wa.me butuh kode negara, jadi link berawalan 0 tidak berfungsi.
+ * SENGAJA hanya menangani awalan 0 / 00 (pasti salah). Nomor yang
+ * sudah benar (62..., +62..., kode negara lain seperti 86 / 81 / 60)
+ * dan bagian ?text=... tidak disentuh sama sekali.
+ */
+function fixWaMeLeadingZero(url: string): string {
+  const m = /^(https?:\/\/wa\.me\/)(\d{8,16})(\/?)(\?.*)?$/i.exec(url);
+  if (!m) return url;
+  const [, base, digits, slash, query] = m;
+  let fixed: string;
+  if (digits.startsWith("00")) fixed = digits.slice(2);
+  else if (digits.startsWith("0")) fixed = "62" + digits.slice(1);
+  else return url;
+  if (fixed.length < 8 || fixed.length > 15) return url;
+  return `${base}${fixed}${slash}${query ?? ""}`;
+}
+
+function classifyWhatsappInput(raw: string): WhatsappInput {
+  const v = raw.trim();
+  if (!v) return null;
+
+  const hasScheme = /^https?:\/\//i.test(v);
+  const withoutScheme = v.replace(/^https?:\/\//i, "");
+
+  // Ada huruf setelah skema -> pasti link (wa.link/xyz, web.whatsapp.com/...).
+  // Tanpa huruf (mis. "https://08123456789", sisa bug lama) -> nomor.
+  if (hasScheme && /[a-z]/i.test(withoutScheme)) {
+    return { kind: "link", url: fixWaMeLeadingZero(v) };
+  }
+
+  // Tanpa skema tapi berbentuk domain (wa.link/xyz, wa.me/628...) -> link.
+  if (!hasScheme && /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(v) && /[a-z]/i.test(v)) {
+    return { kind: "link", url: fixWaMeLeadingZero(`https://${v}`) };
+  }
+
+  const digits = normalizeWhatsappNumber(v);
+  return digits ? { kind: "number", digits } : null;
+}
+
+/**
+ * Untuk TAMPILAN di form: link lama berbentuk https://wa.me/628123...
+ * ditampilkan sebagai nomornya saja. Link lain (grup, ?text=, wa.link,
+ * dsb.) dikembalikan apa adanya.
+ */
+export function whatsappDisplayValue(value: string): string {
+  const m = /^https?:\/\/wa\.me\/(\d{8,15})\/?$/i.exec(value.trim());
+  return m ? m[1] : value;
+}
+
+/** true = isian WhatsApp ini bisa disimpan (nomor valid atau link). */
+export function isValidWhatsappInput(value: string): boolean {
+  if (!value.trim()) return true; // kosong = baris dibuang, bukan error
+  return classifyWhatsappInput(value) !== null;
+}
+
 // Bersihkan data sebelum disimpan: buang row yang URL-nya kosong, dan
 // pastikan URL selalu ada skema (kalau owner ketik tanpa "https://").
+// Khusus WhatsApp: nomor biasa diubah jadi https://wa.me/<nomor>;
+// isian yang bukan nomor valid dan bukan link WA dibuang.
 export function sanitizeSocialLinks(links: SocialLink[]): SocialLink[] {
-  return links
-    .map((link) => ({ ...link, url: link.url.trim() }))
-    .filter((link) => link.url.length > 0)
-    .map((link) => ({
-      ...link,
-      url: /^https?:\/\//i.test(link.url) ? link.url : `https://${link.url}`,
-    }));
+  return links.flatMap((link): SocialLink[] => {
+    const url = link.url.trim();
+    if (!url) return [];
+
+    if (link.platform === "whatsapp") {
+      const parsed = classifyWhatsappInput(url);
+      if (!parsed) return [];
+      return [
+        {
+          ...link,
+          url:
+            parsed.kind === "number"
+              ? `https://wa.me/${parsed.digits}`
+              : parsed.url,
+        },
+      ];
+    }
+
+    return [
+      { ...link, url: /^https?:\/\//i.test(url) ? url : `https://${url}` },
+    ];
+  });
 }
