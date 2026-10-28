@@ -1,7 +1,7 @@
 // app/reseller/page.tsx
 
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "@/lib/supabase/server";
 import { InventoryTable } from "../admin/master/inventory-table";
 import { PendingRequests } from "@/components/pending-requests";
 import { ResellerStats } from "./reseller-stats";
@@ -45,22 +45,39 @@ export default async function ResellerPage() {
     .eq("pending_review", true)
     .order("created_at", { ascending: true });
 
-  const products = myProducts ?? [];  const productIds = products.map((p) => p.id);
+  const products = myProducts ?? [];
+  const displayedProducts = products.slice(0, 25);
+
+  // Hitung scan di DATABASE (fungsi reseller_scan_stats, lihat
+  // sql/17-reseller-scan-stats.sql). Dulu semua baris scan_logs ditarik
+  // lalu dihitung di JavaScript: terpotong di ~1000 baris, dan akun
+  // reseller memang tidak punya policy SELECT di scan_logs.
+  // Pakai service client karena fungsi hanya di-grant ke service_role;
+  // p_reseller_id diisi dari user.id yang role-nya sudah diverifikasi di atas.
   let scanCounts: Record<string, number> = {};
+  let totalScans = 0;
 
-  if (productIds.length > 0) {
-    const { data: scanRows } = await supabase
-      .from("scan_logs")
-      .select("product_id")
-      .in("product_id", productIds);
+  if (products.length > 0) {
+    const { data: scanStats, error: scanError } = await createServiceClient().rpc(
+      "reseller_scan_stats",
+      {
+        p_reseller_id: user.id,
+        p_product_ids: displayedProducts.map((p) => p.id),
+      }
+    );
 
-    scanCounts = (scanRows ?? []).reduce<Record<string, number>>((acc, row) => {
-      acc[row.product_id] = (acc[row.product_id] ?? 0) + 1;
-      return acc;
-    }, {});
+    if (scanError) {
+      console.error("reseller_scan_stats gagal:", scanError.message);
+    } else if (scanStats) {
+      const parsed = scanStats as {
+        total?: number;
+        per_product?: Record<string, number>;
+      };
+      totalScans = parsed.total ?? 0;
+      scanCounts = parsed.per_product ?? {};
+    }
   }
 
-  const totalScans = Object.values(scanCounts).reduce((a, b) => a + b, 0);
   const stats = {
     total_cards: products.length,
     active_cards: products.filter((p) => p.is_active && !p.is_suspended).length,
@@ -90,7 +107,7 @@ export default async function ResellerPage() {
       wide: true,
       content: (
         <InventoryTable
-          products={products.slice(0, 25)}
+          products={displayedProducts}
           scanCounts={scanCounts}
           totalCount={products.length}
           showResellerColumn={false}
