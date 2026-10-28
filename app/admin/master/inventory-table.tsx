@@ -306,6 +306,10 @@ export function InventoryTable({
       setItems(result.data);
       setTotal(result.totalCount ?? 0);
       setCurrentPage(page);
+      // Gabungkan: kartu yang baru muncul di halaman ini ikut punya angka scan.
+      if (result.scanCounts) {
+        setScanCounts((prev) => ({ ...prev, ...result.scanCounts }));
+      }
     },
     [search, resellerFilter, statusFilter]
   );
