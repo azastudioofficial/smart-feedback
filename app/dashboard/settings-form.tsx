@@ -45,6 +45,8 @@ import {
 import { useStore } from "./store-context";
 import {
   SOCIAL_PLATFORM_META,
+  whatsappDisplayValue,
+  isValidWhatsappInput,
   SOCIAL_PLATFORM_ORDER,
   resolveDisplayGroup,
   newSocialLinkId,
@@ -1227,14 +1229,40 @@ export function SettingsForm({
                     />
                   )}
 
-                  <Input
-                    value={link.url}
-                    onChange={(e) =>
-                      handleSocialLinkUrlChange(link.id, e.target.value)
-                    }
-                    placeholder={meta.placeholder}
-                    className="h-11 bg-white text-sm"
-                  />
+                  {link.platform === "whatsapp" ? (
+                    <>
+                      <Input
+                        value={whatsappDisplayValue(link.url)}
+                        onChange={(e) =>
+                          handleSocialLinkUrlChange(link.id, e.target.value)
+                        }
+                        placeholder={meta.placeholder}
+                        inputMode="tel"
+                        autoComplete="off"
+                        className="h-11 bg-white text-sm"
+                      />
+                      {isValidWhatsappInput(link.url) ? (
+                        <p className="text-xs text-[#132320]/55">
+                          Cukup tulis nomor WhatsApp, misalnya 08123456789.
+                          Link wa.me juga boleh.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-[#B5585E]">
+                          Nomor tidak valid. Tulis nomor WhatsApp yang benar,
+                          misalnya 08123456789.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <Input
+                      value={link.url}
+                      onChange={(e) =>
+                        handleSocialLinkUrlChange(link.id, e.target.value)
+                      }
+                      placeholder={meta.placeholder}
+                      className="h-11 bg-white text-sm"
+                    />
+                  )}
                 </div>
               );
             })}
