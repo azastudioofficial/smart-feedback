@@ -682,6 +682,23 @@ export function SettingsForm({
       setProgress(100);
       setMessage("Pengaturan berhasil disimpan.");
 
+      // File logo/sampul SUDAH terunggah & tersimpan. WAJIB dikosongkan:
+      // kalau tidak, setiap Simpan berikutnya (mis. cuma ganti warna,
+      // judul, atau tautan) mengunggah ULANG file yang sama sebagai aset
+      // baru di Cloudinary - itulah yang menumpuk logo kembar. Preview
+      // diganti ke URL Cloudinary-nya (bukan blob lokal) supaya tampilan
+      // tetap sama dan header dashboard tidak memegang blob sementara.
+      if (uploadedLogoUrl) {
+        if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
+        setLogoPreview(uploadedLogoUrl);
+        setLogoFile(null);
+      }
+      if (uploadedCoverUrl) {
+        if (coverPreview?.startsWith("blob:")) URL.revokeObjectURL(coverPreview);
+        setCoverPreview(uploadedCoverUrl);
+        setCoverFile(null);
+      }
+
       // Data yang baru disimpan ini SUDAH ada di tangan kita (form ini
       // sendiri yang mengirimnya) - jadi header dashboard & tab Cetak
       // QR bisa langsung dikasih tahu tanpa nanya balik ke Supabase.
